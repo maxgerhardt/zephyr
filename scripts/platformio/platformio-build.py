@@ -573,6 +573,7 @@ def get_linkerscript_cmd(app_includes, base_ld_script):
         "-D__GCC_LINKER_CMD__",
         "-D_LINKER",
         "-D_ASMLANGUAGE",
+        "-DCONFIG_ARM" # hardcode for ARM, otherwise ifdef check in toolchain/common.h fails
         "-DLINKER_ZEPHYR_PREBUILT",
         "-E",
         "$SOURCE",
