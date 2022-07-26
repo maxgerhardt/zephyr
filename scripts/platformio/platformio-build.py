@@ -1229,12 +1229,12 @@ if not codemodel:
 target_configs = load_target_configurations(codemodel)
 
 app_config = target_configs.get("app")
-prebuilt_config = target_configs.get("zephyr_prebuilt")
+prebuilt_config_0 = target_configs.get("zephyr_pre0")
 
-if not app_config or not prebuilt_config:
+if not app_config or not prebuilt_config_0:
     sys.stderr.write("Error: Couldn't find main Zephyr target in the code model\n")
     sys.stderr.write("App config is there: %s\n" % (str(app_config is not None)))
-    sys.stderr.write("Prebuilt config is there: %s\n" % (str(prebuilt_config is not None)))
+    sys.stderr.write("Prebuilt config is there: %s\n" % (str(prebuilt_config_0 is not None)))
     env.Exit(1)
 
 project_settings = load_project_settings()
@@ -1338,7 +1338,7 @@ if project_settings.get("CONFIG_HAS_DTS", ""):
 #
 
 env.Append(
-    PIOBUILDFILES=compile_source_files(prebuilt_config, env, PROJECT_SRC_DIR),
+    PIOBUILDFILES=compile_source_files(prebuilt_config_0, env, PROJECT_SRC_DIR),
     _EXTRA_ZEPHYR_PIOBUILDFILES=compile_source_files(
         target_configs["zephyr_final"], env, PROJECT_SRC_DIR
     ),
@@ -1348,7 +1348,7 @@ env.Append(
 for dep in (isr_table_file, final_ld_script):
     env.Depends("$PROG_PATH", dep)
 
-linker_arguments = extract_link_args(prebuilt_config)
+linker_arguments = extract_link_args(prebuilt_config_0)
 
 # remove the main linker script flags '-T linker.cmd'
 try:
