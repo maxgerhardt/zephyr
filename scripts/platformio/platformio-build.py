@@ -826,6 +826,23 @@ def generate_isr_table_file_cmd(preliminary_elf, board_config, project_settings)
 
     return cmd
 
+def generate_version_header_file_cmd():
+    cmd = [
+        os.path.join(platform.get_package_dir("tool-cmake"), "bin", "cmake"),
+        "-DZEPHYR_BASE=%s" % FRAMEWORK_DIR,
+        "-DOUT_FILE='%s'" % os.path.join(
+            "$BUILD_DIR", "zephyr", "include", "generated", "version.h"),
+        "-DBUILD_VERSION=%s" % ("zephyr-v" + FRAMEWORK_VERSION.split(".")[1]),
+        "-P",
+        os.path.join(FRAMEWORK_DIR, "cmake", "gen_version_h.cmake")
+    ]
+
+    cmd = env.Command(
+        os.path.join("$BUILD_DIR", "zephyr", "include", "generated", "version.h"),
+        [],
+        env.VerboseAction(" ".join(cmd), "Generating Version Header $TARGET"),
+    )
+    return cmd
 
 def generate_offset_header_file_cmd():
     cmd = [
@@ -1244,6 +1261,7 @@ project_settings = load_project_settings()
 #
 
 offset_header_file = generate_offset_header_file_cmd()
+version_header_file = generate_version_header_file_cmd()
 syscalls_config = parse_syscalls()
 generate_syscall_files(syscalls_config, project_settings)
 generate_kobject_files()
@@ -1324,7 +1342,7 @@ offsets_lib = build_library(env, target_configs["offsets"], PROJECT_SRC_DIR)
 
 preliminary_elf_path = os.path.join("$BUILD_DIR", "zephyr", "firmware-pre.elf")
 
-for dep in (offsets_lib, preliminary_ld_script):
+for dep in (offsets_lib, preliminary_ld_script, version_header_file):
     env.Depends(preliminary_elf_path, dep)
 
 isr_table_file = generate_isr_table_file_cmd(
