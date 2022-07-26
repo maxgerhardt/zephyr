@@ -531,6 +531,7 @@ def get_linkerscript_final_cmd(app_includes, base_ld_script):
         "-DLINKER_PASS2",
         "-D_LINKER",
         "-D_ASMLANGUAGE",
+        "-DCONFIG_ARM",
         "-DLINKER_ZEPHYR_FINAL",
         "-E",
         "$SOURCE",
