@@ -64,24 +64,12 @@ config PWM_MCUX_PWT
 	default y
 	depends on PWM_CAPTURE
 
-config PINMUX_MCUX
-	default y
-	depends on PINMUX
-
 config GPIO
 	default y
-
-config GPIO_MCUX
-	default y
-	depends on GPIO
 
 config SOC_FLASH_MCUX
 	default y
 	depends on FLASH
-
-config UART_MCUX_LPUART
-	default y
-	depends on SERIAL
 
 config I2C_MCUX_LPI2C
 	default y

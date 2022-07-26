@@ -12,12 +12,12 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <kernel.h>
+#include <zephyr/kernel.h>
 
-#include "settings/settings.h"
+#include <zephyr/settings/settings.h>
 #include "settings_priv.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(settings, CONFIG_SETTINGS_LOG_LEVEL);
 
 sys_slist_t settings_load_srcs;
@@ -131,7 +131,7 @@ int settings_save(void)
 	}
 	rc = 0;
 
-	Z_STRUCT_SECTION_FOREACH(settings_handler_static, ch) {
+	STRUCT_SECTION_FOREACH(settings_handler_static, ch) {
 		if (ch->h_export) {
 			rc2 = ch->h_export(settings_save_one);
 			if (!rc) {

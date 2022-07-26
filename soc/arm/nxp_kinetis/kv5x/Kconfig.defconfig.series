@@ -27,25 +27,13 @@ config SOC_FLASH_MCUX
 config GPIO
 	default y
 
-config GPIO_MCUX
-	default y
-	depends on GPIO
-
 config I2C_MCUX
 	default y
 	depends on I2C
 
-config PINMUX_MCUX
-	default y
-	depends on PINMUX
-
 config PWM_MCUX_FTM
 	default y
 	depends on PWM
-
-config UART_MCUX
-	default y
-	depends on SERIAL
 
 config SPI_MCUX_DSPI
 	default y

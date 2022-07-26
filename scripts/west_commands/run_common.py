@@ -26,7 +26,7 @@ from zephyr_ext_common import ZEPHYR_SCRIPTS
 
 # Runners depend on edtlib. Make sure the copy in the tree is
 # available to them before trying to import any.
-sys.path.append(str(ZEPHYR_SCRIPTS / 'dts' / 'python-devicetree' / 'src'))
+sys.path.insert(0, str(ZEPHYR_SCRIPTS / 'dts' / 'python-devicetree' / 'src'))
 
 from runners import get_runner_cls, ZephyrBinaryRunner, MissingProgram
 from runners.core import RunnerConfig
@@ -140,7 +140,7 @@ def add_parser_common(command, parser_adder=None, parser=None):
     group.add_argument('--gdb', help='path to GDB')
     group.add_argument('--openocd', help='path to openocd')
     group.add_argument(
-        '--openocd-search', metavar='DIR',
+        '--openocd-search', metavar='DIR', action='append',
         help='path to add to openocd search path, if applicable')
 
     return parser
@@ -356,8 +356,8 @@ def get_runner_config(build_dir, yaml_path, runners_yaml, args=None):
 
         return None
 
-    def config(attr):
-        return getattr(args, attr, None) or yaml_config.get(attr)
+    def config(attr, default=None):
+        return getattr(args, attr, None) or yaml_config.get(attr, default)
 
     return RunnerConfig(build_dir,
                         yaml_config['board_dir'],
@@ -366,7 +366,7 @@ def get_runner_config(build_dir, yaml_path, runners_yaml, args=None):
                         output_file('bin'),
                         config('gdb'),
                         config('openocd'),
-                        config('openocd_search'))
+                        config('openocd_search', []))
 
 def dump_traceback():
     # Save the current exception to a file and return its path.

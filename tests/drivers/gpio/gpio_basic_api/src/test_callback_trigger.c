@@ -33,7 +33,7 @@ static void callback(const struct device *dev,
 
 static int test_callback(int mode)
 {
-	const struct device *dev = device_get_binding(DEV_NAME);
+	const struct device *dev = DEVICE_DT_GET(DEV);
 	struct drv_data *drv_data = &data;
 
 	gpio_pin_interrupt_configure(dev, PIN_IN, GPIO_INT_DISABLE);
@@ -54,7 +54,7 @@ static int test_callback(int mode)
 	}
 
 	/* 2. configure PIN_IN callback and trigger condition */
-	rc = gpio_pin_configure(dev, PIN_IN, GPIO_INPUT | GPIO_INT_DEBOUNCE);
+	rc = gpio_pin_configure(dev, PIN_IN, GPIO_INPUT);
 	if (rc != 0) {
 		TC_ERROR("config PIN_IN fail: %d\n", rc);
 		goto err_exit;

@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <ztest.h>
-#include <kernel_structs.h>
+#include <zephyr/kernel_structs.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -23,6 +23,10 @@ extern void test_mem_domain_boot_threads(void);
 extern void test_mem_domain_migration(void);
 extern void test_mem_domain_init_fail(void);
 extern void test_mem_domain_remove_part_fail(void);
+extern void test_mem_part_add_error_null(void);
+extern void test_mem_part_add_error_zerosize(void);
+extern void test_mem_part_error_wraparound(void);
+extern void test_mem_part_remove_error_zerosize(void);
 
 extern void test_macros_obtain_names_data_bss(void);
 extern void test_mem_part_assign_bss_vars_zero(void);
@@ -59,13 +63,14 @@ extern void test_kobject_access_grant_error(void);
 extern void test_kobject_access_grant_error_user(void);
 extern void test_kobject_access_grant_error_user_null(void);
 extern void test_kobject_access_all_grant_error(void);
-extern void test_kobject_release_null(void);
+extern void test_kobject_invalid(void);
 extern void test_kobject_free_error(void);
 extern void test_kobject_init_error(void);
 extern void test_kobj_create_out_of_memory(void);
 extern void test_thread_alloc_out_of_idx(void);
 extern void test_alloc_kobjects(void);
 extern void test_kobject_perm_error(void);
+extern void test_all_kobjects_str(void);
 
 
 /* Flag needed to figure out if the fault was expected or not. */
@@ -91,7 +96,7 @@ static inline void set_fault_valid(bool valid)
 #define MSG_Q_MAX_NUM_MSGS (10)
 #define MSG_Q_ALIGN (2)
 #define PRIORITY 5
-#define STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACKSIZE)
+#define STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACK_SIZE)
 #define BLK_SIZE_MIN 16
 #define BLK_SIZE_MAX 64
 #define BLK_NUM_MIN 8
@@ -108,7 +113,7 @@ static inline void set_fault_valid(bool valid)
 #define BLK_NUM_MAX_MD 4
 #define BLK_ALIGN_MD BLK_SIZE_MIN_MD
 #define DESC_SIZE	sizeof(struct sys_mem_pool_block)
-#define STACK_SIZE_MD (512 + CONFIG_TEST_EXTRA_STACKSIZE)
+#define STACK_SIZE_MD (512 + CONFIG_TEST_EXTRA_STACK_SIZE)
 #define PRIORITY_MD 5
 
 #if defined(CONFIG_X86)
@@ -120,18 +125,19 @@ static inline void set_fault_valid(bool valid)
 #elif defined(CONFIG_ARM)
 #define MEM_REGION_ALLOC (Z_THREAD_MIN_STACK_ALIGN)
 #elif defined(CONFIG_RISCV)
-#define MEM_REGION_ALLOC (Z_RISCV_PMP_ALIGN)
+#define MEM_REGION_ALLOC (4)
 #else
 #error "Test suite not compatible for the given architecture"
 #endif
 #define MEM_DOMAIN_ALIGNMENT __aligned(MEM_REGION_ALLOC)
 
 /* for kobject.c */
-#define KOBJECT_STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACKSIZE)
+#define KOBJECT_STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACK_SIZE)
 
 
 
-#if defined(CONFIG_X86_64) || defined(CONFIG_ARM64)
+#if (defined(CONFIG_X86_64) || defined(CONFIG_ARM64) || \
+	(defined(CONFIG_RISCV) && defined(CONFIG_64BIT)))
 #define TEST_HEAP_SIZE	(2 << CONFIG_MAX_THREAD_BYTES) * 1024
 #define MAX_OBJ 512
 #else

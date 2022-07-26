@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <syscall_handler.h>
-#include <drivers/flash.h>
+#include <zephyr/syscall_handler.h>
+#include <zephyr/drivers/flash.h>
 
 static inline int z_vrfy_flash_read(const struct device *dev, off_t offset,
 				    void *data, size_t len)
@@ -28,21 +28,19 @@ static inline int z_vrfy_flash_write(const struct device *dev, off_t offset,
 }
 #include <syscalls/flash_write_mrsh.c>
 
-static inline int z_vrfy_flash_write_protection_set(const struct device *dev,
-						    bool enable)
-{
-	Z_OOPS(Z_SYSCALL_DRIVER_FLASH(dev, write_protection));
-	return z_impl_flash_write_protection_set((const struct device *)dev,
-						 enable);
-}
-#include <syscalls/flash_write_protection_set_mrsh.c>
-
 static inline size_t z_vrfy_flash_get_write_block_size(const struct device *dev)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(dev, K_OBJ_DRIVER_FLASH));
 	return z_impl_flash_get_write_block_size(dev);
 }
 #include <syscalls/flash_get_write_block_size_mrsh.c>
+
+static inline const struct flash_parameters *z_vrfy_flash_get_parameters(const struct device *dev)
+{
+	Z_OOPS(Z_SYSCALL_DRIVER_FLASH(dev, get_parameters));
+	return z_impl_flash_get_parameters(dev);
+}
+#include <syscalls/flash_get_parameters_mrsh.c>
 
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 static inline int z_vrfy_flash_get_page_info_by_offs(const struct device *dev,

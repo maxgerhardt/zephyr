@@ -34,8 +34,8 @@ contains the processor's information and the datasheet.
 Hardware
 ********
 
-The nRF52832 of the Holyiot YJ-16019 is clocked by an external crystal
-with a frequency of 32.768 kHz.
+The nRF52832 of the Holyiot YJ-16019 is clocked by an external crystal with a frequency of 32 MHz
+(Y1). The 32.768 kHz crystal (Y2) shown on the board schematics is not mounted.
 
 Supported Features
 ==================
@@ -67,7 +67,7 @@ hardware features:
 | WDT       | on-chip    | watchdog             |
 +-----------+------------+----------------------+
 
-Other hardware features are not supported by the Zephyr kernel.
+Other hardware features have not been enabled yet for this board.
 
 Connections and IOs
 ===================

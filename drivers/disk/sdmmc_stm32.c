@@ -6,13 +6,13 @@
 
 #define DT_DRV_COMPAT st_stm32_sdmmc
 
-#include <devicetree.h>
-#include <drivers/disk.h>
-#include <drivers/clock_control.h>
-#include <drivers/clock_control/stm32_clock_control.h>
-#include <pinmux/pinmux_stm32.h>
-#include <drivers/gpio.h>
-#include <logging/log.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/disk.h>
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/drivers/clock_control/stm32_clock_control.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/logging/log.h>
 #include <soc.h>
 #include <stm32_ll_rcc.h>
 
@@ -22,29 +22,79 @@ LOG_MODULE_REGISTER(stm32_sdmmc, CONFIG_SDMMC_LOG_LEVEL);
 #define MMC_TypeDef SDMMC_TypeDef
 #endif
 
+#ifndef SDMMC_BUS_WIDE_1B
+#define SDMMC_BUS_WIDE_1B SDIO_BUS_WIDE_1B
+#endif
+
+#ifndef SDMMC_BUS_WIDE_4B
+#define SDMMC_BUS_WIDE_4B SDIO_BUS_WIDE_4B
+#endif
+
+#ifndef SDMMC_BUS_WIDE_8B
+#define SDMMC_BUS_WIDE_8B SDIO_BUS_WIDE_8B
+#endif
+
+typedef void (*irq_config_func_t)(const struct device *dev);
+
 struct stm32_sdmmc_priv {
+	irq_config_func_t irq_config;
+	struct k_sem thread_lock;
+	struct k_sem sync;
 	SD_HandleTypeDef hsd;
 	int status;
 	struct k_work work;
 	struct gpio_callback cd_cb;
-	struct {
-		const char *name;
-		const struct device *port;
-		int pin;
-		int flags;
-	} cd;
-	struct {
-		const char *name;
-		const struct device *port;
-		int pin;
-		int flags;
-	} pe;
+	struct gpio_dt_spec cd;
+	struct gpio_dt_spec pe;
 	struct stm32_pclken pclken;
-	struct {
-		const struct soc_gpio_pinctrl *list;
-		size_t len;
-	} pinctrl;
+	const struct pinctrl_dev_config *pcfg;
 };
+
+#ifdef CONFIG_SDMMC_STM32_HWFC
+static void stm32_sdmmc_fc_enable(struct stm32_sdmmc_priv *priv)
+{
+	MMC_TypeDef *sdmmcx = priv->hsd.Instance;
+
+	sdmmcx->CLKCR |= SDMMC_CLKCR_HWFC_EN;
+}
+#endif
+
+static void stm32_sdmmc_isr(const struct device *dev)
+{
+	struct stm32_sdmmc_priv *priv = dev->data;
+
+	HAL_SD_IRQHandler(&priv->hsd);
+}
+
+void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
+{
+	struct stm32_sdmmc_priv *priv =
+		CONTAINER_OF(hsd, struct stm32_sdmmc_priv, hsd);
+
+	priv->status = hsd->ErrorCode;
+
+	k_sem_give(&priv->sync);
+}
+
+void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsd)
+{
+	struct stm32_sdmmc_priv *priv =
+		CONTAINER_OF(hsd, struct stm32_sdmmc_priv, hsd);
+
+	priv->status = hsd->ErrorCode;
+
+	k_sem_give(&priv->sync);
+}
+
+void HAL_SD_ErrorCallback(SD_HandleTypeDef *hsd)
+{
+	struct stm32_sdmmc_priv *priv =
+		CONTAINER_OF(hsd, struct stm32_sdmmc_priv, hsd);
+
+	priv->status = hsd->ErrorCode;
+
+	k_sem_give(&priv->sync);
+}
 
 static int stm32_sdmmc_clock_enable(struct stm32_sdmmc_priv *priv)
 {
@@ -112,6 +162,10 @@ static int stm32_sdmmc_access_init(struct disk_info *disk)
 		return -EIO;
 	}
 
+#ifdef CONFIG_SDMMC_STM32_HWFC
+	stm32_sdmmc_fc_enable(priv);
+#endif
+
 	priv->status = DISK_STATUS_OK;
 	return 0;
 }
@@ -137,17 +191,30 @@ static int stm32_sdmmc_access_read(struct disk_info *disk, uint8_t *data_buf,
 	struct stm32_sdmmc_priv *priv = dev->data;
 	int err;
 
-	err = HAL_SD_ReadBlocks(&priv->hsd, data_buf, start_sector,
-				num_sector, 30000);
+	k_sem_take(&priv->thread_lock, K_FOREVER);
+
+	err = HAL_SD_ReadBlocks_IT(&priv->hsd, data_buf, start_sector,
+				num_sector);
 	if (err != HAL_OK) {
 		LOG_ERR("sd read block failed %d", err);
-		return -EIO;
+		err = -EIO;
+		goto end;
 	}
 
-	while (HAL_SD_GetCardState(&priv->hsd) != HAL_SD_CARD_TRANSFER)
-		;
+	k_sem_take(&priv->sync, K_FOREVER);
 
-	return 0;
+	if (priv->status != DISK_STATUS_OK) {
+		LOG_ERR("sd read error %d", priv->status);
+		err = -EIO;
+		goto end;
+	}
+
+	while (HAL_SD_GetCardState(&priv->hsd) != HAL_SD_CARD_TRANSFER) {
+	}
+
+end:
+	k_sem_give(&priv->thread_lock);
+	return err;
 }
 
 static int stm32_sdmmc_access_write(struct disk_info *disk,
@@ -158,16 +225,30 @@ static int stm32_sdmmc_access_write(struct disk_info *disk,
 	struct stm32_sdmmc_priv *priv = dev->data;
 	int err;
 
-	err = HAL_SD_WriteBlocks(&priv->hsd, (uint8_t *)data_buf, start_sector,
-				 num_sector, 30000);
+	k_sem_take(&priv->thread_lock, K_FOREVER);
+
+	err = HAL_SD_WriteBlocks_IT(&priv->hsd, (uint8_t *)data_buf, start_sector,
+				 num_sector);
 	if (err != HAL_OK) {
 		LOG_ERR("sd write block failed %d", err);
-		return -EIO;
+		err = -EIO;
+		goto end;
 	}
-	while (HAL_SD_GetCardState(&priv->hsd) != HAL_SD_CARD_TRANSFER)
-		;
 
-	return 0;
+	k_sem_take(&priv->sync, K_FOREVER);
+
+	if (priv->status != DISK_STATUS_OK) {
+		LOG_ERR("sd write error %d", priv->status);
+		err = -EIO;
+		goto end;
+	}
+
+	while (HAL_SD_GetCardState(&priv->hsd) != HAL_SD_CARD_TRANSFER) {
+	}
+
+end:
+	k_sem_give(&priv->thread_lock);
+	return err;
 }
 
 static int stm32_sdmmc_access_ioctl(struct disk_info *disk, uint8_t cmd,
@@ -227,11 +308,11 @@ static bool stm32_sdmmc_card_present(struct stm32_sdmmc_priv *priv)
 {
 	int err;
 
-	if (!priv->cd.name) {
+	if (!priv->cd.port) {
 		return true;
 	}
 
-	err = gpio_pin_get(priv->cd.port, priv->cd.pin);
+	err = gpio_pin_get_dt(&priv->cd);
 	if (err < 0) {
 		LOG_WRN("reading card detect failed %d", err);
 		return true;
@@ -270,12 +351,11 @@ static int stm32_sdmmc_card_detect_init(struct stm32_sdmmc_priv *priv)
 {
 	int err;
 
-	if (!priv->cd.name) {
+	if (!priv->cd.port) {
 		return 0;
 	}
 
-	priv->cd.port = device_get_binding(priv->cd.name);
-	if (!priv->cd.port) {
+	if (!device_is_ready(priv->cd.port)) {
 		return -ENODEV;
 	}
 
@@ -287,21 +367,19 @@ static int stm32_sdmmc_card_detect_init(struct stm32_sdmmc_priv *priv)
 		return err;
 	}
 
-	err = gpio_pin_configure(priv->cd.port, priv->cd.pin,
-				 priv->cd.flags | GPIO_INPUT);
+	err = gpio_pin_configure_dt(&priv->cd, GPIO_INPUT);
 	if (err) {
 		goto remove_callback;
 	}
 
-	err = gpio_pin_interrupt_configure(priv->cd.port, priv->cd.pin,
-					   GPIO_INT_EDGE_BOTH);
+	err = gpio_pin_interrupt_configure_dt(&priv->cd, GPIO_INT_EDGE_BOTH);
 	if (err) {
 		goto unconfigure_pin;
 	}
 	return 0;
 
 unconfigure_pin:
-	gpio_pin_configure(priv->cd.port, priv->cd.pin, GPIO_DISCONNECTED);
+	gpio_pin_configure_dt(&priv->cd, GPIO_DISCONNECTED);
 remove_callback:
 	gpio_remove_callback(priv->cd.port, &priv->cd_cb);
 	return err;
@@ -309,13 +387,12 @@ remove_callback:
 
 static int stm32_sdmmc_card_detect_uninit(struct stm32_sdmmc_priv *priv)
 {
-	if (!priv->cd.name) {
+	if (!priv->cd.port) {
 		return 0;
 	}
 
-	gpio_pin_interrupt_configure(priv->cd.port, priv->cd.pin,
-				     GPIO_INT_MODE_DISABLED);
-	gpio_pin_configure(priv->cd.port, priv->cd.pin, GPIO_DISCONNECTED);
+	gpio_pin_interrupt_configure_dt(&priv->cd, GPIO_INT_MODE_DISABLED);
+	gpio_pin_configure_dt(&priv->cd, GPIO_DISCONNECTED);
 	gpio_remove_callback(priv->cd.port, &priv->cd_cb);
 	return 0;
 }
@@ -324,17 +401,15 @@ static int stm32_sdmmc_pwr_init(struct stm32_sdmmc_priv *priv)
 {
 	int err;
 
-	if (!priv->pe.name) {
+	if (!priv->pe.port) {
 		return 0;
 	}
 
-	priv->pe.port = device_get_binding(priv->pe.name);
-	if (!priv->pe.port) {
+	if (!device_is_ready(priv->pe.port)) {
 		return -ENODEV;
 	}
 
-	err = gpio_pin_configure(priv->pe.port, priv->pe.pin,
-				 priv->pe.flags | GPIO_OUTPUT_ACTIVE);
+	err = gpio_pin_configure_dt(&priv->pe, GPIO_OUTPUT_ACTIVE);
 	if (err) {
 		return err;
 	}
@@ -346,11 +421,11 @@ static int stm32_sdmmc_pwr_init(struct stm32_sdmmc_priv *priv)
 
 static int stm32_sdmmc_pwr_uninit(struct stm32_sdmmc_priv *priv)
 {
-	if (!priv->pe.name) {
+	if (!priv->pe.port) {
 		return 0;
 	}
 
-	gpio_pin_configure(priv->pe.port, priv->pe.pin, GPIO_DISCONNECTED);
+	gpio_pin_configure_dt(&priv->pe, GPIO_DISCONNECTED);
 	return 0;
 }
 
@@ -362,12 +437,16 @@ static int disk_stm32_sdmmc_init(const struct device *dev)
 	k_work_init(&priv->work, stm32_sdmmc_cd_handler);
 
 	/* Configure dt provided device signals when available */
-	err = stm32_dt_pinctrl_configure(priv->pinctrl.list,
-					 priv->pinctrl.len,
-					 (uint32_t)priv->hsd.Instance);
+	err = pinctrl_apply_state(priv->pcfg, PINCTRL_STATE_DEFAULT);
 	if (err < 0) {
 		return err;
 	}
+
+	priv->irq_config(dev);
+
+	/* Initialize semaphores */
+	k_sem_init(&priv->thread_lock, 1, 1);
+	k_sem_init(&priv->sync, 0, 1);
 
 	err = stm32_sdmmc_card_detect_init(priv);
 	if (err) {
@@ -401,35 +480,42 @@ err_card_detect:
 
 #if DT_NODE_HAS_STATUS(DT_DRV_INST(0), okay)
 
-static const struct soc_gpio_pinctrl sdmmc_pins_1[] =
-						ST_STM32_DT_INST_PINCTRL(0, 0);
+PINCTRL_DT_INST_DEFINE(0);
+
+static void stm32_sdmmc_irq_config_func(const struct device *dev)
+{
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		DT_INST_IRQ(0, priority),
+		stm32_sdmmc_isr, DEVICE_DT_INST_GET(0),
+		0);
+	irq_enable(DT_INST_IRQN(0));
+}
+
+#if DT_INST_PROP(0, bus_width) == 1
+#define SDMMC_BUS_WIDTH SDMMC_BUS_WIDE_1B
+#elif DT_INST_PROP(0, bus_width) == 4
+#define SDMMC_BUS_WIDTH SDMMC_BUS_WIDE_4B
+#elif DT_INST_PROP(0, bus_width) == 8
+#define SDMMC_BUS_WIDTH SDMMC_BUS_WIDE_8B
+#endif /* DT_INST_PROP(0, bus_width) */
 
 static struct stm32_sdmmc_priv stm32_sdmmc_priv_1 = {
+	.irq_config = stm32_sdmmc_irq_config_func,
 	.hsd = {
 		.Instance = (MMC_TypeDef *)DT_INST_REG_ADDR(0),
+		.Init.BusWide = SDMMC_BUS_WIDTH,
 	},
 #if DT_INST_NODE_HAS_PROP(0, cd_gpios)
-	.cd = {
-		.name = DT_INST_GPIO_LABEL(0, cd_gpios),
-		.pin = DT_INST_GPIO_PIN(0, cd_gpios),
-		.flags = DT_INST_GPIO_FLAGS(0, cd_gpios),
-	},
+	.cd = GPIO_DT_SPEC_INST_GET(0, cd_gpios),
 #endif
 #if DT_INST_NODE_HAS_PROP(0, pwr_gpios)
-	.pe = {
-		.name = DT_INST_GPIO_LABEL(0, pwr_gpios),
-		.pin = DT_INST_GPIO_PIN(0, pwr_gpios),
-		.flags = DT_INST_GPIO_FLAGS(0, pwr_gpios),
-	},
+	.pe = GPIO_DT_SPEC_INST_GET(0, pwr_gpios),
 #endif
 	.pclken = {
 		.bus = DT_INST_CLOCKS_CELL(0, bus),
 		.enr = DT_INST_CLOCKS_CELL(0, bits),
 	},
-	.pinctrl = {
-		.list = sdmmc_pins_1,
-		.len = ARRAY_SIZE(sdmmc_pins_1)
-	}
+	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(0),
 };
 
 DEVICE_DT_INST_DEFINE(0, disk_stm32_sdmmc_init, NULL,

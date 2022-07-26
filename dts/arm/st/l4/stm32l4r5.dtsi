@@ -19,6 +19,10 @@
 			};
 		};
 
+		rcc: rcc@40021000 {
+			undershoot-prevention;
+		};
+
 		pinctrl: pin-controller@48000000 {
 			gpiod: gpio@48000c00 {
 				compatible = "st,stm32-gpio";
@@ -138,15 +142,21 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00000002>;
 			interrupts = <29 0>;
 			interrupt-names = "global";
+			st,prescaler = <0>;
 			status = "disabled";
 			label = "TIMERS_3";
 
 			pwm {
 				compatible = "st,stm32-pwm";
 				status = "disabled";
-				st,prescaler = <0>;
 				label = "PWM_3";
 				#pwm-cells = <3>;
+			};
+
+			counter {
+				compatible = "st,stm32-counter";
+				status = "disabled";
+				label = "COUNTER_3";
 			};
 		};
 
@@ -156,15 +166,21 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00000004>;
 			interrupts = <30 0>;
 			interrupt-names = "global";
+			st,prescaler = <0>;
 			status = "disabled";
 			label = "TIMERS_4";
 
 			pwm {
 				compatible = "st,stm32-pwm";
 				status = "disabled";
-				st,prescaler = <0>;
 				label = "PWM_4";
 				#pwm-cells = <3>;
+			};
+
+			counter {
+				compatible = "st,stm32-counter";
+				status = "disabled";
+				label = "COUNTER_4";
 			};
 		};
 
@@ -174,15 +190,21 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00000008>;
 			interrupts = <50 0>;
 			interrupt-names = "global";
+			st,prescaler = <0>;
 			status = "disabled";
 			label = "TIMERS_5";
 
 			pwm {
 				compatible = "st,stm32-pwm";
 				status = "disabled";
-				st,prescaler = <0>;
 				label = "PWM_5";
 				#pwm-cells = <3>;
+			};
+
+			counter {
+				compatible = "st,stm32-counter";
+				status = "disabled";
+				label = "COUNTER_5";
 			};
 		};
 
@@ -192,15 +214,21 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00000020>;
 			interrupts = <55 0>;
 			interrupt-names = "global";
+			st,prescaler = <0>;
 			status = "disabled";
 			label = "TIMERS_7";
 
 			pwm {
 				compatible = "st,stm32-pwm";
 				status = "disabled";
-				st,prescaler = <0>;
 				label = "PWM_7";
 				#pwm-cells = <3>;
+			};
+
+			counter {
+				compatible = "st,stm32-counter";
+				status = "disabled";
+				label = "COUNTER_7";
 			};
 		};
 
@@ -210,13 +238,13 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00002000>;
 			interrupts = <43 0>, <44 0>, <45 0>, <46 0>;
 			interrupt-names = "brk", "up", "trgcom", "cc";
+			st,prescaler = <0>;
 			status = "disabled";
 			label = "TIMERS_8";
 
 			pwm {
 				compatible = "st,stm32-pwm";
 				status = "disabled";
-				st,prescaler = <0>;
 				label = "PWM_8";
 				#pwm-cells = <3>;
 			};
@@ -228,33 +256,34 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00040000>;
 			interrupts = <26 0>;
 			interrupt-names = "global";
+			st,prescaler = <0>;
 			status = "disabled";
 			label = "TIMERS_17";
 
 			pwm {
 				compatible = "st,stm32-pwm";
 				status = "disabled";
-				st,prescaler = <0>;
 				label = "PWM_17";
 				#pwm-cells = <3>;
+			};
+
+			counter {
+				compatible = "st,stm32-counter";
+				status = "disabled";
+				label = "COUNTER_17";
 			};
 		};
 
 		can1: can@40006400 {
 			compatible = "st,stm32-can";
-			#address-cells = <1>;
-			#size-cells = <0>;
 			reg = <0x40006400 0x400>;
 			interrupts = <19 0>, <20 0>, <21 0>, <22 0>;
 			interrupt-names = "TX", "RX0", "RX1", "SCE";
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x02000000>; //RCC_APB1ENR1_CAN1EN
 			status = "disabled";
 			label = "CAN_1";
-			bus-speed = <125000>;
 			sjw = <1>;
-			prop-seg = <0>;
-			phase-seg1 = <4>;
-			phase-seg2 = <5>;
+			sample-point = <875>;
 		};
 
 		usbotg_fs: otgfs@50000000 {
@@ -296,6 +325,7 @@
 			compatible = "st,stm32-sdmmc";
 			reg = <0x50062400 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_AHB2 0x400000>;
+			interrupts = <49 0>;
 			status = "disabled";
 			label = "SDMMC_1";
 		};
@@ -307,6 +337,11 @@
 			status = "disabled";
 			label = "DAC_1";
 			#io-channel-cells = <1>;
+		};
+
+		adc1: adc@50040000 {
+			has-temp-channel;
+			has-vref-channel;
 		};
 	};
 

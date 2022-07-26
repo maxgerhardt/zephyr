@@ -5,6 +5,8 @@
 
 menuconfig IIS3DHHC
 	bool "IIS3DHHC accelerometer sensor"
+	default y
+	depends on DT_HAS_ST_IIS3DHHC_ENABLED
 	depends on SPI
 	select HAS_STMEMSC
 	select USE_STDC_IIS3DHHC
@@ -54,7 +56,7 @@ config IIS3DHHC_THREAD_STACK_SIZE
 menu "Attributes"
 
 config IIS3DHHC_NORM_MODE
-	bool "Enable Sensor at 1KHz"
+	bool "Sensor at 1KHz"
 	default y
 
 config IIS3DHHC_DRDY_INT1

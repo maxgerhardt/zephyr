@@ -14,15 +14,15 @@ properties:
     interrupts:
       required: true
 
-    label:
+    girqs:
+      type: array
       required: true
+      description: Array of GIRQ numbers [8:26] and bit positions [0:31].
 
-    girq:
+    "#girq-cells":
       type: int
-      required: true
-      description: GIRQ for this device
+      const: 2
 
-    girq-bit:
-      type: int
-      required: true
-      description: Bit position in GIRQ for this device
+girq-cells:
+    - girq_num
+    - bitpos

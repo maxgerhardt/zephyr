@@ -8,17 +8,11 @@ config BOARD
 
 if GPIO
 
-config GPIO_DW
-	default y
+config GPIO_INIT_PRIORITY
+	default 60
 
-config GPIO_DW_0
-	default y
-	depends on GPIO_DW
-
+# for CY8C95XX
 config I2C
-	default y
-
-config GPIO_CY8C95XX
 	default y
 
 endif # GPIO
@@ -37,9 +31,6 @@ config SPI_DW_ARC_AUX_REGS
 	default n
 
 config SPI_DW_ACCESS_WORD_ONLY
-	default y
-
-config GPIO_SNPS_CREG
 	default y
 
 endif # SPI_DW

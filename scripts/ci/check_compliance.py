@@ -192,7 +192,7 @@ class CheckPatch(ComplianceTest):
 
     """
     name = "checkpatch"
-    doc = "See https://docs.zephyrproject.org/latest/contribute/#coding-style for more details."
+    doc = "See https://docs.zephyrproject.org/latest/contribute/guidelines.html#coding-style for more details."
     path_hint = "<git-top>"
 
     def run(self):
@@ -219,7 +219,7 @@ class CheckPatch(ComplianceTest):
 class KconfigCheck(ComplianceTest):
     """
     Checks is we are introducing any new warnings/errors with Kconfig,
-    for example using undefiend Kconfig variables.
+    for example using undefined Kconfig variables.
     """
     name = "Kconfig"
     doc = "See https://docs.zephyrproject.org/latest/guides/kconfig/index.html for more details."
@@ -231,6 +231,8 @@ class KconfigCheck(ComplianceTest):
         self.check_top_menu_not_too_long(kconf)
         self.check_no_pointless_menuconfigs(kconf)
         self.check_no_undef_within_kconfig(kconf)
+        self.check_no_redefined_in_defconfig(kconf)
+        self.check_no_enable_in_boolean_prompt(kconf)
         if full:
             self.check_no_undef_outside_kconfig(kconf)
 
@@ -268,35 +270,25 @@ class KconfigCheck(ComplianceTest):
                 ))
             fp_module_file.write(content)
 
-    def write_kconfig_soc(self):
+    def get_kconfig_dts(self, kconfig_dts_file):
         """
-        Write KConfig soc files to be sourced during Kconfig parsing
+        Generate the Kconfig.dts using dts/bindings as the source.
+
+        This is needed to complete Kconfig compliance tests.
 
         """
-
-        soc_defconfig_file = os.path.join(tempfile.gettempdir(), "Kconfig.soc.defconfig")
-        soc_file = os.path.join(tempfile.gettempdir(), "Kconfig.soc")
-        soc_arch_file = os.path.join(tempfile.gettempdir(), "Kconfig.soc.arch")
-        shield_defconfig_file = os.path.join(tempfile.gettempdir(), "Kconfig.shield.defconfig")
-        shield_file = os.path.join(tempfile.gettempdir(), "Kconfig.shield")
+        # Invoke the script directly using the Python executable since this is
+        # not a module nor a pip-installed Python utility
+        zephyr_drv_kconfig_path = os.path.join(ZEPHYR_BASE, "scripts", "dts",
+			                       "gen_driver_kconfig_dts.py")
+        binding_path = os.path.join(ZEPHYR_BASE, "dts", "bindings")
+        cmd = [sys.executable, zephyr_drv_kconfig_path,
+               '--kconfig-out', kconfig_dts_file, '--bindings', binding_path]
         try:
-            with open(soc_defconfig_file, 'w', encoding="utf-8") as fp:
-                fp.write(f'osource "{ZEPHYR_BASE}/soc/$(ARCH)/*/Kconfig.defconfig"\n')
-
-            with open(soc_file, 'w', encoding="utf-8") as fp:
-                fp.write(f'osource "{ZEPHYR_BASE}/soc/$(ARCH)/*/Kconfig.soc"\n')
-
-            with open(soc_arch_file, 'w', encoding="utf-8") as fp:
-                fp.write(f'osource "{ZEPHYR_BASE}/soc/$(ARCH)/Kconfig"\n\
-osource "{ZEPHYR_BASE}/soc/$(ARCH)/*/Kconfig"\n')
-
-            with open(shield_defconfig_file, 'w', encoding="utf-8") as fp:
-                fp.write(f'osource "{ZEPHYR_BASE}/boards/shields/*/Kconfig.defconfig"\n')
-
-            with open(shield_file, 'w', encoding="utf-8") as fp:
-                fp.write(f'osource "{ZEPHYR_BASE}/boards/shields/*/Kconfig.shield"\n')
-        except IOError as ex:
+            _ = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as ex:
             self.error(ex.output)
+
 
     def parse_kconfig(self):
         """
@@ -328,6 +320,7 @@ osource "{ZEPHYR_BASE}/soc/$(ARCH)/*/Kconfig"\n')
         os.environ["ARCH"] = "*"
         os.environ["KCONFIG_BINARY_DIR"] = tempfile.gettempdir()
         os.environ['DEVICETREE_CONF'] = "dummy"
+        os.environ['TOOLCHAIN_HAS_NEWLIB'] = "y"
 
         # Older name for DEVICETREE_CONF, for compatibility with older Zephyr
         # versions that don't have the renaming
@@ -336,8 +329,8 @@ osource "{ZEPHYR_BASE}/soc/$(ARCH)/*/Kconfig"\n')
         # For multi repo support
         self.get_modules(os.path.join(tempfile.gettempdir(), "Kconfig.modules"))
 
-        # For list of SOC_ROOT support
-        self.write_kconfig_soc()
+        # For Kconfig.dts support
+        self.get_kconfig_dts(os.path.join(tempfile.gettempdir(), "Kconfig.dts"))
 
         # Tells Kconfiglib to generate warnings for all references to undefined
         # symbols within Kconfig files
@@ -375,6 +368,42 @@ Expected no more than {} potentially visible items (items with prompts) in the
 top-level Kconfig menu, found {} items. If you're deliberately adding new
 entries, then bump the 'max_top_items' variable in {}.
 """.format(max_top_items, n_top_items, __file__))
+
+    def check_no_redefined_in_defconfig(self, kconf):
+        # Checks that no symbols are (re)defined in defconfigs.
+
+        for node in kconf.node_iter():
+            if "defconfig" in node.filename and (node.prompt or node.help):
+                self.add_failure(f"""
+Kconfig node '{node.item.name}' found with prompt or help in {node.filename}.
+Options must not be defined in defconfig files.
+""")
+                continue
+
+    def check_no_enable_in_boolean_prompt(self, kconf):
+        # Checks that boolean's prompt does not start with "Enable...".
+
+        for node in kconf.node_iter():
+            # skip Kconfig nodes not in-tree (will present an absolute path)
+            if os.path.isabs(node.filename):
+                continue
+
+            # 'kconfiglib' is global
+            # pylint: disable=undefined-variable
+
+            # only process boolean symbols with a prompt
+            if (not isinstance(node.item, kconfiglib.Symbol) or
+                node.item.type != kconfiglib.BOOL or
+                not node.prompt or
+                not node.prompt[0]):
+                continue
+
+            if re.match(r"^[Ee]nable.*", node.prompt[0]):
+                self.add_failure(f"""
+Boolean option '{node.item.name}' prompt must not start with 'Enable...'. Please
+check Kconfig guidelines.
+""")
+                continue
 
     def check_no_pointless_menuconfigs(self, kconf):
         # Checks that there are no pointless 'menuconfig' symbols without
@@ -522,6 +551,9 @@ def get_defined_syms(kconf):
 UNDEF_KCONFIG_WHITELIST = {
     "ALSO_MISSING",
     "APP_LINK_WITH_",
+    "ARMCLANG_STD_LIBC",  # The ARMCLANG_STD_LIBC is defined in the toolchain
+                          # Kconfig which is sourced based on Zephyr toolchain
+			  # variant and therefore not visible to compliance.
     "CDC_ACM_PORT_NAME_",
     "CLOCK_STM32_SYSCLK_SRC_",
     "CMU",
@@ -552,6 +584,8 @@ UNDEF_KCONFIG_WHITELIST = {
     "REG2",
     "SAMPLE_MODULE_LOG_LEVEL",  # Used as an example in samples/subsys/logging
     "SAMPLE_MODULE_LOG_LEVEL_DBG",  # Used in tests/subsys/logging/log_api
+    "LOG_BACKEND_MOCK_OUTPUT_DEFAULT", #Referenced in tests/subsys/logging/log_syst
+    "LOG_BACKEND_MOCK_OUTPUT_SYST", #Referenced in testcase.yaml of log_syst test
     "SEL",
     "SHIFT",
     "SOC_WATCH",  # Issue 13749
@@ -568,12 +602,16 @@ UNDEF_KCONFIG_WHITELIST = {
     "USB_CONSOLE",
     "USE_STDC_",
     "WHATEVER",
+    "EXTRA_FIRMWARE_DIR", # Linux, in boards/xtensa/intel_adsp_cavs25/doc
+    "HUGETLBFS",          # Linux, in boards/xtensa/intel_adsp_cavs25/doc
+    "MODVERSIONS",        # Linux, in boards/xtensa/intel_adsp_cavs25/doc
+    "SECURITY_LOADPIN",   # Linux, in boards/xtensa/intel_adsp_cavs25/doc
 }
 
 class KconfigBasicCheck(KconfigCheck, ComplianceTest):
     """
     Checks is we are introducing any new warnings/errors with Kconfig,
-    for example using undefiend Kconfig variables.
+    for example using undefined Kconfig variables.
     This runs the basic Kconfig test, which is checking only for undefined
     references inside the Kconfig tree.
     """
@@ -722,7 +760,7 @@ class Nits(ComplianceTest):
     already covered by e.g. checkpatch.pl and pylint.
     """
     name = "Nits"
-    doc = "See https://docs.zephyrproject.org/latest/contribute/#coding-style for more details."
+    doc = "See https://docs.zephyrproject.org/latest/contribute/guidelines.html#coding-style for more details."
     path_hint = "<git-top>"
 
     def run(self):
@@ -820,7 +858,7 @@ class GitLint(ComplianceTest):
 
     """
     name = "Gitlint"
-    doc = "See https://docs.zephyrproject.org/latest/contribute/#commit-guidelines for more details"
+    doc = "See https://docs.zephyrproject.org/latest/contribute/guidelines.html#commit-guidelines for more details"
     path_hint = "<git-top>"
 
     def run(self):
@@ -887,15 +925,20 @@ class PyLint(ComplianceTest):
 
 def filter_py(root, fnames):
     # PyLint check helper. Returns all Python script filenames among the
-    # filenames in 'fnames', relative to directory 'root'. Uses the
-    # python-magic library, so that we can detect Python files that
-    # don't end in .py as well. python-magic is a frontend to libmagic,
-    # which is also used by 'file'.
+    # filenames in 'fnames', relative to directory 'root'.
+    #
+    # Uses the python-magic library, so that we can detect Python
+    # files that don't end in .py as well. python-magic is a frontend
+    # to libmagic, which is also used by 'file'.
+    #
+    # The extra os.path.isfile() is necessary because git includes
+    # submodule directories in its output.
 
     return [fname for fname in fnames
-            if fname.endswith(".py") or
-               magic.from_file(os.path.join(root, fname),
-                               mime=True) == "text/x-python"]
+            if os.path.isfile(os.path.join(root, fname)) and
+            (fname.endswith(".py") or
+             magic.from_file(os.path.join(root, fname),
+                             mime=True) == "text/x-python")]
 
 
 class Identity(ComplianceTest):
@@ -903,7 +946,7 @@ class Identity(ComplianceTest):
     Checks if Emails of author and signed-off messages are consistent.
     """
     name = "Identity"
-    doc = "See https://docs.zephyrproject.org/latest/contribute/#commit-guidelines for more details"
+    doc = "See https://docs.zephyrproject.org/latest/contribute/guidelines.html#commit-guidelines for more details"
     # git rev-list and git log don't depend on the current (sub)directory
     # unless explicited
     path_hint = "<git-top>"

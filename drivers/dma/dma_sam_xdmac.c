@@ -11,16 +11,16 @@
  */
 
 #include <errno.h>
-#include <sys/__assert.h>
-#include <device.h>
-#include <init.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 #include <string.h>
 #include <soc.h>
-#include <drivers/dma.h>
+#include <zephyr/drivers/dma.h>
 #include "dma_sam_xdmac.h"
 
 #define LOG_LEVEL CONFIG_DMA_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(dma_sam_xdmac);
 
 #define XDMAC_INT_ERR (XDMAC_CIE_RBIE | XDMAC_CIE_WBIE | XDMAC_CIE_ROIE)
@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(dma_sam_xdmac);
 struct sam_xdmac_channel_cfg {
 	void *user_data;
 	dma_callback_t callback;
+	uint32_t data_size;
 };
 
 /* Device constant configuration parameters */
@@ -45,17 +46,12 @@ struct sam_xdmac_dev_data {
 	struct sam_xdmac_channel_cfg dma_channels[DMA_CHANNELS_NO];
 };
 
-#define DEV_NAME(dev) ((dev)->name)
-#define DEV_CFG(dev) \
-	((const struct sam_xdmac_dev_cfg *const)(dev)->config)
-#define DEV_DATA(dev) \
-	((struct sam_xdmac_dev_data *const)(dev)->data)
-
 static void sam_xdmac_isr(const struct device *dev)
 {
-	const struct sam_xdmac_dev_cfg *const dev_cfg = DEV_CFG(dev);
-	struct sam_xdmac_dev_data *const dev_data = DEV_DATA(dev);
-	Xdmac *const xdmac = dev_cfg->regs;
+	const struct sam_xdmac_dev_cfg *const dev_cfg = dev->config;
+	struct sam_xdmac_dev_data *const dev_data = dev->data;
+
+	Xdmac * const xdmac = dev_cfg->regs;
 	struct sam_xdmac_channel_cfg *channel_cfg;
 	uint32_t isr_status;
 	uint32_t err;
@@ -84,8 +80,9 @@ static void sam_xdmac_isr(const struct device *dev)
 int sam_xdmac_channel_configure(const struct device *dev, uint32_t channel,
 				struct sam_xdmac_channel_config *param)
 {
-	const struct sam_xdmac_dev_cfg *const dev_cfg = DEV_CFG(dev);
-	Xdmac *const xdmac = dev_cfg->regs;
+	const struct sam_xdmac_dev_cfg *const dev_cfg = dev->config;
+
+	Xdmac * const xdmac = dev_cfg->regs;
 
 	if (channel >= DMA_CHANNELS_NO) {
 		return -EINVAL;
@@ -126,8 +123,9 @@ int sam_xdmac_channel_configure(const struct device *dev, uint32_t channel,
 int sam_xdmac_transfer_configure(const struct device *dev, uint32_t channel,
 				 struct sam_xdmac_transfer_config *param)
 {
-	const struct sam_xdmac_dev_cfg *const dev_cfg = DEV_CFG(dev);
-	Xdmac *const xdmac = dev_cfg->regs;
+	const struct sam_xdmac_dev_cfg *const dev_cfg = dev->config;
+
+	Xdmac * const xdmac = dev_cfg->regs;
 
 	if (channel >= DMA_CHANNELS_NO) {
 		return -EINVAL;
@@ -178,7 +176,7 @@ int sam_xdmac_transfer_configure(const struct device *dev, uint32_t channel,
 static int sam_xdmac_config(const struct device *dev, uint32_t channel,
 			    struct dma_config *cfg)
 {
-	struct sam_xdmac_dev_data *const dev_data = DEV_DATA(dev);
+	struct sam_xdmac_dev_data *const dev_data = dev->data;
 	struct sam_xdmac_channel_config channel_cfg;
 	struct sam_xdmac_transfer_config transfer_cfg;
 	uint32_t burst_size;
@@ -207,6 +205,7 @@ static int sam_xdmac_config(const struct device *dev, uint32_t channel,
 	burst_size = find_msb_set(cfg->source_burst_length) - 1;
 	LOG_DBG("burst_size=%d", burst_size);
 	data_size = find_msb_set(cfg->source_data_size) - 1;
+	dev_data->dma_channels[channel].data_size = data_size;
 	LOG_DBG("data_size=%d", data_size);
 
 	switch (cfg->channel_direction) {
@@ -269,9 +268,24 @@ static int sam_xdmac_config(const struct device *dev, uint32_t channel,
 	return ret;
 }
 
+static int sam_xdmac_transfer_reload(const struct device *dev, uint32_t channel,
+				     uint32_t src, uint32_t dst, size_t size)
+{
+	struct sam_xdmac_dev_data *const dev_data = dev->data;
+	struct sam_xdmac_transfer_config transfer_cfg = {
+		.sa = src,
+		.da = dst,
+		.ublen = size >> dev_data->dma_channels[channel].data_size,
+	};
+
+	return sam_xdmac_transfer_configure(dev, channel, &transfer_cfg);
+}
+
 int sam_xdmac_transfer_start(const struct device *dev, uint32_t channel)
 {
-	Xdmac *const xdmac = DEV_CFG(dev)->regs;
+	const struct sam_xdmac_dev_cfg *config = dev->config;
+
+	Xdmac * const xdmac = config->regs;
 
 	if (channel >= DMA_CHANNELS_NO) {
 		return -EINVAL;
@@ -292,7 +306,9 @@ int sam_xdmac_transfer_start(const struct device *dev, uint32_t channel)
 
 int sam_xdmac_transfer_stop(const struct device *dev, uint32_t channel)
 {
-	Xdmac *const xdmac = DEV_CFG(dev)->regs;
+	const struct sam_xdmac_dev_cfg *config = dev->config;
+
+	Xdmac * const xdmac = config->regs;
 
 	if (channel >= DMA_CHANNELS_NO) {
 		return -EINVAL;
@@ -317,8 +333,9 @@ int sam_xdmac_transfer_stop(const struct device *dev, uint32_t channel)
 
 static int sam_xdmac_initialize(const struct device *dev)
 {
-	const struct sam_xdmac_dev_cfg *const dev_cfg = DEV_CFG(dev);
-	Xdmac *const xdmac = dev_cfg->regs;
+	const struct sam_xdmac_dev_cfg *const dev_cfg = dev->config;
+
+	Xdmac * const xdmac = dev_cfg->regs;
 
 	/* Configure interrupts */
 	dev_cfg->irq_config();
@@ -334,13 +351,14 @@ static int sam_xdmac_initialize(const struct device *dev)
 	/* Enable module's IRQ */
 	irq_enable(dev_cfg->irq_id);
 
-	LOG_INF("Device %s initialized", DEV_NAME(dev));
+	LOG_INF("Device %s initialized", dev->name);
 
 	return 0;
 }
 
 static const struct dma_driver_api sam_xdmac_driver_api = {
 	.config = sam_xdmac_config,
+	.reload = sam_xdmac_transfer_reload,
 	.start = sam_xdmac_transfer_start,
 	.stop = sam_xdmac_transfer_stop,
 };
@@ -364,4 +382,4 @@ static struct sam_xdmac_dev_data dma0_sam_data;
 
 DEVICE_DT_INST_DEFINE(0, &sam_xdmac_initialize, NULL,
 		    &dma0_sam_data, &dma0_sam_config, POST_KERNEL,
-		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &sam_xdmac_driver_api);
+		    CONFIG_DMA_INIT_PRIORITY, &sam_xdmac_driver_api);

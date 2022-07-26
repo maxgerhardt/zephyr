@@ -14,7 +14,7 @@
 #ifndef ZEPHYR_ARCH_ARM_INCLUDE_AARCH32_CORTEX_M_EXC_H_
 #define ZEPHYR_ARCH_ARM_INCLUDE_AARCH32_CORTEX_M_EXC_H_
 
-#include <arch/cpu.h>
+#include <zephyr/arch/cpu.h>
 
 #ifdef _ASMLANGUAGE
 
@@ -22,9 +22,9 @@
 
 #else
 
-#include <arch/arm/aarch32/cortex_m/cmsis.h>
-#include <arch/arm/aarch32/exc.h>
-#include <irq_offload.h>
+#include <zephyr/arch/arm/aarch32/cortex_m/cmsis.h>
+#include <zephyr/arch/arm/aarch32/exc.h>
+#include <zephyr/irq_offload.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,6 +73,19 @@ static ALWAYS_INLINE bool arch_is_in_nested_exception(const z_arch_esf_t *esf)
 	return (esf->basic.xpsr & IPSR_ISR_Msk) ? (true) : (false);
 }
 
+#if defined(CONFIG_USERSPACE)
+/**
+ * @brief Is the thread in unprivileged mode
+ *
+ * @param esf the exception stack frame (unused)
+ * @return true if the current thread was in unprivileged mode
+ */
+static ALWAYS_INLINE bool z_arm_preempted_thread_in_user_mode(const z_arch_esf_t *esf)
+{
+	return z_arm_thread_is_in_user_mode();
+}
+#endif
+
 /**
  * @brief Setup system exceptions
  *
@@ -80,11 +93,12 @@ static ALWAYS_INLINE bool arch_is_in_nested_exception(const z_arch_esf_t *esf)
  * Set PendSV priority to lowest possible.
  *
  * Enable fault exceptions.
- *
- * @return N/A
  */
 static ALWAYS_INLINE void z_arm_exc_setup(void)
 {
+	/* PendSV is set to lowest priority, regardless of it being used.
+	 * This is done as the IRQ is always enabled.
+	 */
 	NVIC_SetPriority(PendSV_IRQn, _EXC_PENDSV_PRIO);
 
 #ifdef CONFIG_CPU_CORTEX_M_HAS_BASEPRI
@@ -98,6 +112,9 @@ static ALWAYS_INLINE void z_arm_exc_setup(void)
 	NVIC_SetPriority(MemoryManagement_IRQn, _EXC_FAULT_PRIO);
 	NVIC_SetPriority(BusFault_IRQn, _EXC_FAULT_PRIO);
 	NVIC_SetPriority(UsageFault_IRQn, _EXC_FAULT_PRIO);
+#if defined(CONFIG_CPU_CORTEX_M_HAS_DWT)
+	NVIC_SetPriority(DebugMonitor_IRQn, _EXC_FAULT_PRIO);
+#endif
 #if defined(CONFIG_ARM_SECURE_FIRMWARE)
 	NVIC_SetPriority(SecureFault_IRQn, _EXC_FAULT_PRIO);
 #endif /* CONFIG_ARM_SECURE_FIRMWARE */
@@ -129,14 +146,25 @@ static ALWAYS_INLINE void z_arm_exc_setup(void)
 	 * SecureHardFault in a PE without the Main Extension.
 	 */
 #endif /* ARM_SECURE_FIRMWARE && !ARM_SECURE_BUSFAULT_HARDFAULT_NMI */
+
+#if defined(CONFIG_CPU_CORTEX_M_HAS_SYSTICK) && \
+	!defined(CONFIG_CORTEX_M_SYSTICK)
+	/* SoC implements SysTick, but the system does not use it
+	 * as driver for system timing. However, the SysTick IRQ is
+	 * always enabled, so we must ensure the interrupt priority
+	 * is set to a level lower than the kernel interrupts (for
+	 * the assert mechanism to work properly) in case the SysTick
+	 * interrupt is accidentally raised.
+	 */
+	NVIC_SetPriority(SysTick_IRQn, _EXC_IRQ_DEFAULT_PRIO);
+#endif /* CPU_CORTEX_M_HAS_SYSTICK && ! CORTEX_M_SYSTICK */
+
 }
 
 /**
  * @brief Clear Fault exceptions
  *
  * Clear out exceptions for Mem, Bus, Usage and Hard Faults
- *
- * @return N/A
  */
 static ALWAYS_INLINE void z_arm_clear_faults(void)
 {

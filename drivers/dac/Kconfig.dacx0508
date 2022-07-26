@@ -16,6 +16,6 @@ config DAC_DACX0508_INIT_PRIORITY
 	int "Init priority"
 	default 80
 	help
-	  DACx0508 DAC device driver initialization priority.
+	  TI DACx0508 DAC device driver initialization priority.
 
 endif # DAC_DACX0508

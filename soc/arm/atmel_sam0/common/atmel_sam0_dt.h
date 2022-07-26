@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2020 Linaro Ltd.
+ * Copyright (c) 2021 Gerson Fernando Budke
  *
  * SPDX-License-Identifier: Apache-2.0
  */

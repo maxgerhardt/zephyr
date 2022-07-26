@@ -17,7 +17,7 @@ struct timer_data {
 #define DURATION 100
 #define PERIOD 50
 #define EXPIRE_TIMES 4
-#define WITHIN_ERROR(var, target, epsilon) (abs((target) - (var)) <= (epsilon))
+#define WITHIN_ERROR(var, target, epsilon) (llabs((int64_t) ((target) - (var))) <= (epsilon))
 
 /* ms can be converted precisely to ticks only when a ms is exactly
  * represented by an integral number of ticks.  If the conversion is
@@ -104,7 +104,7 @@ static bool interval_check(int64_t interval, int64_t desired)
 		slop += 2 * k_ticks_to_ms_ceil32(1);
 	}
 
-	if (abs(interval - desired) > slop) {
+	if (!WITHIN_ERROR(interval, desired, slop)) {
 		return false;
 	}
 
@@ -197,7 +197,7 @@ void test_timer_duration_period(void)
 
 	k_timer_start(&duration_timer, K_FOREVER, K_MSEC(PERIOD));
 	TIMER_ASSERT(tdata.stop_cnt == 1, &duration_timer);
-	/* cleanup environemtn */
+	/* cleanup environment */
 	k_timer_stop(&duration_timer);
 }
 
@@ -267,7 +267,7 @@ void test_timer_period_0(void)
 			 && (tdata.expire_cnt == 0)), &period0_timer);
 	TIMER_ASSERT(tdata.stop_cnt == 0, &period0_timer);
 
-	/* cleanup environemtn */
+	/* cleanup environment */
 	k_timer_stop(&period0_timer);
 }
 
@@ -306,7 +306,7 @@ void test_timer_period_k_forever(void)
 		     &period0_timer);
 	TIMER_ASSERT(tdata.stop_cnt == 0, &period0_timer);
 
-	/* cleanup environemtn */
+	/* cleanup environment */
 	k_timer_stop(&period0_timer);
 }
 
@@ -406,7 +406,7 @@ void test_timer_periodicity(void)
 		 *
 		 * Please note, that expected firing time is not the
 		 * one requested, as the kernel uses the ticks to manage
-		 * time. The actual perioid will be equal to [tick time]
+		 * time. The actual period will be equal to [tick time]
 		 * multiplied by k_ms_to_ticks_ceil32(PERIOD).
 		 *
 		 * In the case of inexact conversion the delta will
@@ -614,7 +614,7 @@ static void user_data_timer_handler(struct k_timer *timer)
  * Validate user-specific data associated with timer
  *
  * It creates prototype of K_TIMER_DEFINE and starts the timer using
- * k_timer_start() with specific initial duration, alongwith associated
+ * k_timer_start() with specific initial duration, along with associated
  * user data using k_timer_user_data_set and k_timer_user_data_get().
  * Stops the timer using k_timer_stop() and checks for correct data
  * retrieval after timer completion.
@@ -719,7 +719,7 @@ void test_timer_remaining(void)
 		     "tick/busy slew %d larger than test threshold %u",
 		     delta_ticks, slew_ticks);
 
-	/* Note +1 tick precision: even though we're calcluating in
+	/* Note +1 tick precision: even though we're calculating in
 	 * ticks, we're waiting in k_busy_wait(), not for a timer
 	 * interrupt, so it's possible for that to take 1 tick longer
 	 * than expected on systems where the requested microsecond
@@ -802,11 +802,11 @@ void test_sleep_abs(void)
 	/* Systems with very high tick rates and/or slow idle resume
 	 * (I've seen this on intel_adsp) can occasionally take more
 	 * than a tick to return from k_sleep().  Set a 100us real
-	 * time slop.
+	 *  time slop or more depending on the time to resume
 	 */
 	k_ticks_t late = end - (start + sleep_ticks);
 
-	zassert_true(late >= 0 && late < k_us_to_ticks_ceil32(100),
+	zassert_true(late >= 0 && late < k_us_to_ticks_ceil32(250),
 		     "expected wakeup at %lld, got %lld (late %lld)",
 		     start + sleep_ticks, end, late);
 }

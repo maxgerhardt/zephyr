@@ -39,6 +39,13 @@ description: |
   the bus controlling the peripheral and the second index specifies the bit used to
   control the peripheral clock in that bus register.
 
+  Note 1: No additional specifier means gating clock is also the clock source (ie
+          'PCLK/PCLK1/PCLK2' depending on the device). There is no need to add a second
+          cell to explicitly set it.
+  Note 2: Default peripheral clock configuration (ie the one provided in *.dsti files)
+          should be the one matching SoC reset state. Confere reference manual to check
+          what is the reset value of the kernel clock source for each peripheral.
+
 compatible: "st,stm32h7-rcc"
 
 include: [clock-controller.yaml, base.yaml]
@@ -51,14 +58,14 @@ properties:
       const: 2
 
     clock-frequency:
-      required: false
+      required: true
       type: int
       description: |
         default frequency in Hz for clock output
 
     d1cpre:
       type: int
-      required: false
+      required: true
       enum:
         - 1
       description: |
@@ -70,7 +77,7 @@ properties:
 
     hpre:
       type: int
-      required: false
+      required: true
       description: |
           D2 domain, CPU2 core clock and AHB(1/2/3/4) peripheral prescaler
       enum:
@@ -86,7 +93,7 @@ properties:
 
     d1ppre:
       type: int
-      required: false
+      required: true
       description: |
           D1 domain, APB3 peripheral prescaler
       enum:
@@ -98,7 +105,7 @@ properties:
 
     d2ppre1:
       type: int
-      required: false
+      required: true
       description: |
           D2 domain, APB1 peripheral prescaler
       enum:
@@ -110,7 +117,7 @@ properties:
 
     d2ppre2:
       type: int
-      required: false
+      required: true
       description: |
           D2 domain, APB2 peripheral prescaler
       enum:
@@ -122,7 +129,7 @@ properties:
 
     d3ppre:
       type: int
-      required: false
+      required: true
       description: |
           D3 domain, APB4 peripheral prescaler
       enum:

@@ -1,16 +1,18 @@
 /*
  * Copyright (c) 2020 TriaGnoSys GmbH
+ * Copyright (c) 2021 Safran Passenger Innovations Germany GmbH
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <arm/armv8-m.dtsi>
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
 #include "gpio_gecko.h"
 
 / {
 	chosen {
+		zephyr,entropy = &se;
 		zephyr,flash-controller = &msc;
 	};
 
@@ -168,6 +170,15 @@
 				#gpio-cells = <2>;
 				status = "disabled";
 			};
+		};
+
+		se: semailbox@4c000000 {
+			compatible = "silabs,gecko-semailbox";
+			reg = <0x4c000000 0x80>;
+			interrupts = <0 3>, <1 3>, <2 3>;
+			interrupt-names = "SETAMPERHOST", "SEMBRX", "SEMBTX";
+			label = "SEMAILBOX";
+			status = "okay";
 		};
 
 		wdog0: wdog@4a018000 {

@@ -6,10 +6,10 @@
 
 #define DT_DRV_COMPAT nxp_kinetis_trng
 
-#include <device.h>
-#include <drivers/entropy.h>
-#include <random/rand32.h>
-#include <init.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/entropy.h>
+#include <zephyr/random/rand32.h>
+#include <zephyr/init.h>
 
 #include "fsl_trng.h"
 
@@ -45,7 +45,7 @@ static int entropy_mcux_trng_init(const struct device *);
 DEVICE_DT_INST_DEFINE(0,
 		    entropy_mcux_trng_init, NULL, NULL,
 		    &entropy_mcux_config,
-		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
+		    PRE_KERNEL_1, CONFIG_ENTROPY_INIT_PRIORITY,
 		    &entropy_mcux_trng_api_funcs);
 
 static int entropy_mcux_trng_init(const struct device *dev)

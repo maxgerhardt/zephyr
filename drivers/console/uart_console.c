@@ -13,26 +13,26 @@
  * Hooks into the printk and fputc (for printf) modules. Poll driven.
  */
 
-#include <kernel.h>
+#include <zephyr/kernel.h>
 
 #include <stdio.h>
 #include <zephyr/types.h>
-#include <sys/__assert.h>
+#include <zephyr/sys/__assert.h>
 #include <errno.h>
 #include <ctype.h>
 
-#include <device.h>
-#include <init.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 
-#include <drivers/uart.h>
-#include <drivers/console/console.h>
-#include <drivers/console/uart_console.h>
-#include <toolchain.h>
-#include <linker/sections.h>
-#include <sys/atomic.h>
-#include <sys/printk.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/console/console.h>
+#include <zephyr/drivers/console/uart_console.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/linker/sections.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/printk.h>
 #ifdef CONFIG_UART_CONSOLE_MCUMGR
-#include "mgmt/mcumgr/serial.h"
+#include <zephyr/mgmt/mcumgr/serial.h>
 #endif
 
 static const struct device *uart_console_dev;
@@ -96,19 +96,11 @@ static int console_out(int c)
 #endif
 
 #if defined(CONFIG_STDOUT_CONSOLE)
-extern void __stdout_hook_install(int (*hook)(int));
-#else
-#define __stdout_hook_install(x) \
-	do {    /* nothing */	 \
-	} while ((0))
+extern void __stdout_hook_install(int (*hook)(int c));
 #endif
 
 #if defined(CONFIG_PRINTK)
-extern void __printk_hook_install(int (*fn)(int));
-#else
-#define __printk_hook_install(x) \
-	do {    /* nothing */	 \
-	} while ((0))
+extern void __printk_hook_install(int (*fn)(int c));
 #endif
 
 #if defined(CONFIG_CONSOLE_HANDLER)
@@ -564,29 +556,30 @@ void uart_register_input(struct k_fifo *avail, struct k_fifo *lines,
 }
 
 #else
-#define console_input_init(x) \
-	do {    /* nothing */ \
-	} while ((0))
-#define uart_register_input(x) \
-	do {    /* nothing */  \
-	} while ((0))
+void uart_register_input(struct k_fifo *avail, struct k_fifo *lines,
+			 uint8_t (*completion)(char *str, uint8_t len))
+{
+	ARG_UNUSED(avail);
+	ARG_UNUSED(lines);
+	ARG_UNUSED(completion);
+}
 #endif
 
 /**
- *
  * @brief Install printk/stdout hook for UART console output
- *
- * @return N/A
  */
 
 static void uart_console_hook_install(void)
 {
+#if defined(CONFIG_STDOUT_CONSOLE)
 	__stdout_hook_install(console_out);
+#endif
+#if defined(CONFIG_PRINTK)
 	__printk_hook_install(console_out);
+#endif
 }
 
 /**
- *
  * @brief Initialize one UART as the console/debug port
  *
  * @return 0 if successful, otherwise failed.
@@ -597,7 +590,10 @@ static int uart_console_init(const struct device *arg)
 	ARG_UNUSED(arg);
 
 	/* Claim console device */
-	uart_console_dev = device_get_binding(CONFIG_UART_CONSOLE_ON_DEV_NAME);
+	uart_console_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+	if (!device_is_ready(uart_console_dev)) {
+		return -ENODEV;
+	}
 
 	uart_console_hook_install();
 
@@ -606,11 +602,9 @@ static int uart_console_init(const struct device *arg)
 
 /* UART console initializes after the UART device itself */
 SYS_INIT(uart_console_init,
-#if defined(CONFIG_USB_UART_CONSOLE)
-	 APPLICATION,
-#elif defined(CONFIG_EARLY_CONSOLE)
+#if defined(CONFIG_EARLY_CONSOLE)
 	 PRE_KERNEL_1,
 #else
 	 POST_KERNEL,
 #endif
-	 CONFIG_UART_CONSOLE_INIT_PRIORITY);
+	 CONFIG_CONSOLE_INIT_PRIORITY);

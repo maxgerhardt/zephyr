@@ -26,6 +26,7 @@
 		i2c0 = &i2c_smb_0;
 		i2c1 = &i2c_smb_1;
 		kscan0 = &kscan0;
+		watchdog0 = &wdog;
 	};
 
 	power-states {
@@ -60,12 +61,16 @@
 	status = "okay";
 	label = "I2C0";
 	port_sel = <0>;
+	sda-gpios = <&gpio_000_036 3 0>;
+	scl-gpios = <&gpio_000_036 4 0>;
 };
 
 &i2c_smb_1 {
 	status = "okay";
 	label = "I2C1";
 	port_sel = <1>;
+	sda-gpios = <&gpio_100_136 24 0>;
+	scl-gpios = <&gpio_100_136 25 0>;
 };
 
 &espi0 {

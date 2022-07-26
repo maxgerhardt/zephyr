@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <drivers/adc.h>
-#include <drivers/adc/adc_emul.h>
-#include <zephyr.h>
+#include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/adc/adc_emul.h>
+#include <zephyr/zephyr.h>
 #include <ztest.h>
 
-#define ADC_DEVICE_NAME		DT_LABEL(DT_INST(0, zephyr_adc_emul))
+#define ADC_DEVICE_NODE		DT_INST(0, zephyr_adc_emul)
 #define ADC_REF_INTERNAL_MV	DT_PROP(DT_INST(0, zephyr_adc_emul), ref_internal_mv)
 #define ADC_REF_EXTERNAL1_MV	DT_PROP(DT_INST(0, zephyr_adc_emul), ref_external1_mv)
 #define ADC_RESOLUTION		14
@@ -18,7 +18,7 @@
 #define ADC_2ND_CHANNEL_ID	1
 
 #define INVALID_ADC_VALUE	SHRT_MIN
-/* Raw to milivolt conversion doesn't handle rounding */
+/* Raw to millivolt conversion doesn't handle rounding */
 #define MV_OUTPUT_EPS		2
 #define SEQUENCE_STEP		100
 
@@ -32,9 +32,9 @@ static ZTEST_BMEM int16_t m_sample_buffer[BUFFER_SIZE];
  */
 const struct device *get_adc_device(void)
 {
-	const struct device *adc_dev = device_get_binding(ADC_DEVICE_NAME);
+	const struct device *adc_dev = DEVICE_DT_GET(ADC_DEVICE_NODE);
 
-	zassert_not_null(adc_dev, "Cannot get ADC device");
+	zassert_true(device_is_ready(adc_dev), "ADC device is not ready");
 
 	return adc_dev;
 }
@@ -113,9 +113,10 @@ static void check_empty_samples(int expected_count)
 {
 	int i;
 
-	for (i = expected_count; i < BUFFER_SIZE; i++)
+	for (i = expected_count; i < BUFFER_SIZE; i++) {
 		zassert_equal(INVALID_ADC_VALUE, m_sample_buffer[i],
 			      "[%u] should be empty", i);
+	}
 }
 
 /**
@@ -494,7 +495,7 @@ static void test_adc_emul_input_higher_than_ref(void)
 
 	/*
 	 * Check samples - returned value should max out on reference value.
-	 * Raw value shoudn't exceed resolution.
+	 * Raw value shouldn't exceed resolution.
 	 */
 	check_samples(samples, ADC_REF_INTERNAL_MV, 0 /* step */,
 		      1 /* channels */, 0 /* first channel data */,
@@ -502,9 +503,10 @@ static void test_adc_emul_input_higher_than_ref(void)
 
 	check_empty_samples(samples);
 
-	for (i = 0; i < samples; i++)
+	for (i = 0; i < samples; i++) {
 		zassert_equal(BIT_MASK(ADC_RESOLUTION), m_sample_buffer[i],
 			      "[%u] raw value isn't max value", i);
+	}
 }
 
 /**
@@ -538,7 +540,7 @@ static void test_adc_emul_reference(void)
 
 	ret = adc_channel_setup(adc_dev, &channel_cfg);
 	zassert_not_equal(ret, 0,
-			  "Setting up of the %d channel shuldn't succeeded",
+			  "Setting up of the %d channel shouldn't succeeded",
 			  ADC_2ND_CHANNEL_ID);
 
 	channel_setup(adc_dev, ADC_REF_INTERNAL, ADC_GAIN_1,

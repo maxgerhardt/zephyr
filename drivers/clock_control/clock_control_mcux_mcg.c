@@ -9,13 +9,13 @@
 
 #define DT_DRV_COMPAT nxp_kinetis_mcg
 
-#include <drivers/clock_control.h>
-#include <dt-bindings/clock/kinetis_mcg.h>
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/dt-bindings/clock/kinetis_mcg.h>
 #include <soc.h>
 #include <fsl_clock.h>
 
 #define LOG_LEVEL CONFIG_CLOCK_CONTROL_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(clock_control_mcg);
 
 static int mcux_mcg_on(const struct device *dev,
@@ -68,5 +68,5 @@ DEVICE_DT_INST_DEFINE(0,
 		    &mcux_mcg_init,
 		    NULL,
 		    NULL, NULL,
-		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
+		    PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 		    &mcux_mcg_driver_api);

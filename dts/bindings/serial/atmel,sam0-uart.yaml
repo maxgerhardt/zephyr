@@ -2,7 +2,9 @@ description: Atmel SAM0 SERCOM UART driver
 
 compatible: "atmel,sam0-uart"
 
-include: uart-controller.yaml
+include:
+    - name: uart-controller.yaml
+    - name: pinctrl-device.yaml
 
 properties:
     reg:

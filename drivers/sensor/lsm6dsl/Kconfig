@@ -6,6 +6,8 @@
 
 menuconfig LSM6DSL
 	bool "LSM6DSL I2C/SPI accelerometer and gyroscope Chip"
+	default y
+	depends on DT_HAS_ST_LSM6DSL_ENABLED
 	depends on I2C || SPI
 	help
 	  Enable driver for LSM6DSL accelerometer and gyroscope
@@ -51,12 +53,12 @@ config LSM6DSL_THREAD_STACK_SIZE
 	  Stack size of thread used by the driver to handle interrupts.
 
 config LSM6DSL_ENABLE_TEMP
-	bool "Enable temperature"
+	bool "Temperature"
 	help
 	  Enable/disable temperature
 
 config LSM6DSL_SENSORHUB
-	bool "Enable I2C sensorhub feature"
+	bool "I2C sensorhub feature"
 	help
 	  Enable/disable internal sensorhub
 

@@ -119,6 +119,8 @@ The Zephyr nucleo_g474re board configuration supports the following hardware fea
 +-----------+------------+-------------------------------------+
 | ADC       | on-chip    | adc                                 |
 +-----------+------------+-------------------------------------+
+| DAC       | on-chip    | DAC Controller                      |
++-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | flash memory                        |
 +-----------+------------+-------------------------------------+
 | COUNTER   | on-chip    | rtc                                 |
@@ -163,10 +165,12 @@ Default Zephyr Peripheral Mapping:
 - SPI_3_SCK : PC10
 - SPI_3_MISO : PC11
 - SPI_3_MOSI : PC12
+- PWM_2_CH1 : PA5 (might conflict with SPI1)
 - PWM_3_CH1 : PB4
 - USER_PB : PC13
 - LD2 : PA5
 - ADC1_IN1 : PA0
+- DAC1_OUT1 : PA4
 
 System Clock
 ------------
@@ -196,26 +200,6 @@ Flashing
 ========
 
 Nucleo G474RE board includes an ST-LINK/V3E embedded debug tool interface.
-
-This interface is not yet supported by the openocd version included in the Zephyr SDK.
-
-Instead, support can be enabled on pyocd by adding "pack" support with
-the following pyocd command:
-
-.. code-block:: console
-
-   $ pyocd pack --update
-   $ pyocd pack --install stm32g474re
-
-Note:
-To manually enable the openocd interface, You can still update, compile and install
-a 'local' openocd from the official openocd repo http://openocd.zylin.com .
-Then run the following openocd command where the '/usr/local/bin/openocd'is your path
-for the freshly installed openocd, given by "$ which openocd" :
-
-.. code-block:: console
-
-   $ west flash --openocd /usr/local/bin/openocd
 
 Flashing an application to Nucleo G474RE
 ----------------------------------------

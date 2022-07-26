@@ -11,7 +11,7 @@ K_THREAD_STACK_DEFINE(tstack, STACK_SIZE);
 K_THREAD_STACK_ARRAY_DEFINE(tstacks, MAX_NUM_THREAD, STACK_SIZE);
 
 /* Not in header file intentionally, see #16760 */
-K_THREAD_STACK_EXTERN(ustack);
+K_THREAD_STACK_DECLARE(ustack, STACK_SIZE);
 
 void spin_for_ms(int ms)
 {
@@ -73,7 +73,8 @@ void test_main(void)
 			 ztest_user_unit_test(test_k_thread_priority_set_init_null),
 			 ztest_user_unit_test(test_k_thread_priority_set_overmax),
 			 ztest_user_unit_test(test_k_thread_priority_set_upgrade),
-			 ztest_user_unit_test(test_k_wakeup_init_null)
+			 ztest_user_unit_test(test_k_wakeup_init_null),
+			 ztest_unit_test(test_slice_perthread)
 			 );
 	ztest_run_test_suite(threads_scheduling);
 }

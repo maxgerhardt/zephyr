@@ -8,18 +8,20 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_sock_can, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
-#include <kernel.h>
-#include <drivers/entropy.h>
-#include <sys/util.h>
-#include <net/net_context.h>
-#include <net/net_pkt.h>
-#include <net/socket.h>
-#include <syscall_handler.h>
-#include <sys/fdtable.h>
-#include <net/socket_can.h>
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/entropy.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/net/net_context.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/socket.h>
+#include <zephyr/syscall_handler.h>
+#include <zephyr/sys/fdtable.h>
+#include <zephyr/net/canbus.h>
+#include <zephyr/net/socket_can.h>
+#include <zephyr/drivers/can.h>
 
 #include "sockets_internal.h"
 
@@ -71,6 +73,11 @@ int zcan_socket(int family, int type, int proto)
 	ctx->user_data = NULL;
 
 	k_fifo_init(&ctx->recv_q);
+
+	/* Condition variable is used to avoid keeping lock for a long time
+	 * when waiting data to be received
+	 */
+	k_condvar_init(&ctx->cond.recv);
 
 	z_finalize_fd(fd, ctx,
 		      (const struct fd_op_vtable *)&can_sock_fd_op_vtable);
@@ -131,6 +138,13 @@ static void zcan_received_cb(struct net_context *ctx, struct net_pkt *pkt,
 
 		ctx = receivers[i].ctx;
 
+		/* To prevent the reader from missing the wake-up signal
+		 *  as described in commit 1184089 and implemented in sockets.c
+		 */
+		if (ctx->cond.lock) {
+			(void)k_mutex_lock(ctx->cond.lock, K_FOREVER);
+		}
+
 		NET_DBG("[%d] ctx %p pkt %p st %d", i, ctx, clone, status);
 
 		/* if pkt is NULL, EOF */
@@ -152,14 +166,18 @@ static void zcan_received_cb(struct net_context *ctx, struct net_pkt *pkt,
 
 				NET_DBG("Set EOF flag on pkt %p", ctx);
 			}
-
-			return;
 		} else {
 			/* Normal packet */
 			net_pkt_set_eof(clone, false);
 
 			k_fifo_put(&ctx->recv_q, clone);
 		}
+
+		if (ctx->cond.lock) {
+			k_mutex_unlock(ctx->cond.lock);
+		}
+
+		k_condvar_signal(&ctx->cond.recv);
 	}
 
 	if (clone && clone != pkt) {
@@ -281,6 +299,18 @@ static ssize_t zcan_recvfrom_ctx(struct net_context *ctx, void *buf,
 
 		pkt = k_fifo_peek_head(&ctx->recv_q);
 	} else {
+		/* Mechanism as in sockets.c to allow parallel rx/tx
+		 */
+		if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
+			int res;
+
+			res = zsock_wait_data(ctx, &timeout);
+			if (res < 0) {
+				errno = -res;
+				return -1;
+			}
+		}
+
 		pkt = k_fifo_get(&ctx->recv_q, timeout);
 	}
 
@@ -514,7 +544,7 @@ static int can_register_receiver(struct net_if *iface, struct net_context *ctx,
 {
 	int i;
 
-	NET_DBG("Max %lu receivers", ARRAY_SIZE(receivers));
+	NET_DBG("Max %zu receivers", ARRAY_SIZE(receivers));
 
 	for (i = 0; i < ARRAY_SIZE(receivers); i++) {
 		if (receivers[i].ctx != NULL) {
@@ -703,4 +733,5 @@ static bool can_is_supported(int family, int type, int proto)
 	return true;
 }
 
-NET_SOCKET_REGISTER(af_can, AF_CAN, can_is_supported, zcan_socket);
+NET_SOCKET_REGISTER(af_can, NET_SOCKET_DEFAULT_PRIO, AF_CAN, can_is_supported,
+		    zcan_socket);

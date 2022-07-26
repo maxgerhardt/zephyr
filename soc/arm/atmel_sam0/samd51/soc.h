@@ -13,8 +13,6 @@
 
 #include <zephyr/types.h>
 
-/* Add include for DTS generated information */
-#include <devicetree.h>
 
 #if defined(CONFIG_SOC_PART_NUMBER_SAMD51G18A)
 #include <samd51g18a.h>
@@ -42,6 +40,8 @@
 
 #include "sercom_fixup_samd5x.h"
 #include "tc_fixup_samd5x.h"
+#include "adc_fixup_sam0.h"
+#include "../common/soc_port.h"
 #include "../common/atmel_sam0_dt.h"
 
 #define SOC_ATMEL_SAM0_OSC32K_FREQ_HZ 32768

@@ -7,8 +7,9 @@
 #ifndef ZEPHYR_DRIVERS_SENSOR_BATTERY_BQ274XX_H_
 #define ZEPHYR_DRIVERS_SENSOR_BATTERY_BQ274XX_H_
 
-#include <logging/log.h>
-#include <drivers/gpio.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/gpio.h>
 LOG_MODULE_REGISTER(bq274xx, CONFIG_SENSOR_LOG_LEVEL);
 
 /*** General Constant ***/
@@ -80,10 +81,7 @@ LOG_MODULE_REGISTER(bq274xx, CONFIG_SENSOR_LOG_LEVEL);
 #define BQ274XX_DELAY 1000
 
 struct bq274xx_data {
-	const struct device *i2c;
-#ifdef CONFIG_BQ274XX_LAZY_CONFIGURE
-	bool lazy_loaded;
-#endif
+	bool configured;
 	uint16_t voltage;
 	int16_t avg_current;
 	int16_t stdby_current;
@@ -96,13 +94,10 @@ struct bq274xx_data {
 	uint16_t remaining_charge_capacity;
 	uint16_t nom_avail_capacity;
 	uint16_t full_avail_capacity;
-#ifdef CONFIG_PM_DEVICE
-	enum pm_device_state pm_state;
-#endif
 };
 
 struct bq274xx_config {
-	char *bus_name;
+	struct i2c_dt_spec i2c;
 	uint16_t design_voltage;
 	uint16_t design_capacity;
 	uint16_t taper_current;
@@ -110,6 +105,7 @@ struct bq274xx_config {
 #ifdef CONFIG_PM_DEVICE
 	struct gpio_dt_spec int_gpios;
 #endif
+	bool lazy_loading;
 };
 
 #endif

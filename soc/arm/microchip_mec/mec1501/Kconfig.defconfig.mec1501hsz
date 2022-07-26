@@ -8,10 +8,6 @@ if SOC_MEC1501_HSZ
 config SOC
 	default "mec1501hsz"
 
-config UART_NS16550
-	default y
-	depends on SERIAL
-
 config PINMUX_XEC
 	default y
 	depends on PINMUX
@@ -22,10 +18,6 @@ config GPIO
 config ADC_XEC
 	default y
 	depends on ADC
-
-config GPIO_XEC
-	default y
-	depends on GPIO
 
 config I2C_XEC
 	default y
@@ -58,15 +50,5 @@ config PECI_XEC
 config SPI_XEC_QMSPI
 	default y
 	depends on SPI
-
-if SOC_POWER_MANAGEMENT
-
-config PM
-	default y if SYS_CLOCK_EXISTS
-
-config PM_DEVICE
-	default n
-
-endif # SOC_POWER_MANAGEMENT
 
 endif # SOC_MEC1501_HSZ

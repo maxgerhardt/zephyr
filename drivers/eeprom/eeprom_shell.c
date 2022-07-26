@@ -10,8 +10,8 @@
  * @brief EEPROM shell commands.
  */
 
-#include <shell/shell.h>
-#include <drivers/eeprom.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/drivers/eeprom.h>
 #include <stdlib.h>
 
 struct args_index {
@@ -173,7 +173,7 @@ static int cmd_fill(const struct shell *shell, size_t argc, char **argv)
 		return -EINVAL;
 	}
 
-	shell_print(shell, "Writing %d bytes of 0x%02x to EEPROM...", len,
+	shell_print(shell, "Writing %d bytes of 0x%02lx to EEPROM...", len,
 		    pattern);
 
 	addr = initial_offset;

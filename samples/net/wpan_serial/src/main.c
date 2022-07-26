@@ -12,17 +12,17 @@
  * with popular Contiki-based native border routers.
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(wpan_serial, CONFIG_USB_DEVICE_LOG_LEVEL);
 
-#include <drivers/uart.h>
-#include <zephyr.h>
-#include <usb/usb_device.h>
-#include <random/rand32.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/random/rand32.h>
 
-#include <net/buf.h>
+#include <zephyr/net/buf.h>
 #include <net_private.h>
-#include <net/ieee802154_radio.h>
+#include <zephyr/net/ieee802154_radio.h>
 
 #if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
 #define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
@@ -520,6 +520,11 @@ int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
 	return 0;
 }
 
+enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface, struct net_pkt *pkt)
+{
+	return NET_CONTINUE;
+}
+
 void main(void)
 {
 	const struct device *dev;
@@ -528,9 +533,9 @@ void main(void)
 
 	LOG_INF("Starting wpan_serial application");
 
-	dev = device_get_binding("CDC_ACM_0");
-	if (!dev) {
-		LOG_ERR("CDC ACM device not found");
+	dev = DEVICE_DT_GET_ONE(zephyr_cdc_acm_uart);
+	if (!device_is_ready(dev)) {
+		LOG_ERR("CDC ACM device not ready");
 		return;
 	}
 

@@ -20,6 +20,8 @@ supported:
   - watchdog
   - adc
   - dac
+  - dma
+  - pwm
 testing:
   ignore_tags:
     - net

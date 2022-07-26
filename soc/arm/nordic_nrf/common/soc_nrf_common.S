@@ -9,16 +9,17 @@
  * @brief System/hardware module for Nordic Semiconductor nRFxx family processors
  */
 
-#include <toolchain.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/linker/sections.h>
 
 _ASM_FILE_PROLOGUE
 
 GTEXT(SystemInit)
-GTEXT(z_platform_init)
+GTEXT(z_arm_platform_init)
 
-SECTION_FUNC(TEXT, z_platform_init)
+SECTION_FUNC(TEXT, z_arm_platform_init)
 
-	/* Implement z_platform_init() directly in ASM,
+	/* Implement z_arm_platform_init() directly in ASM,
 	 * and ensure no stack access is performed until
 	 * we jump to SystemInit().
 	 */

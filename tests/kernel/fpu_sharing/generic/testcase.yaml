@@ -8,7 +8,7 @@ tests:
     min_ram: 16
   kernel.fpu_sharing.generic.arm:
     extra_args: PI_NUM_ITERATIONS=70000
-    filter: CONFIG_ARMV7_M_ARMV8_M_FP
+    filter: CONFIG_ARMV7_M_ARMV8_M_FP or CONFIG_ARMV7_R_FP
     slow: true
     tags: fpu kernel
     timeout: 600
@@ -40,6 +40,11 @@ tests:
     arch_allow: sparc
     tags: fpu kernel
     timeout: 600
+    # qemu_leon3 crashes during z_cbvprintf_impl.
+    # Workaround it by making the main stack larger.
+    # See #47477.
+    extra_configs:
+      - CONFIG_MAIN_STACK_SIZE=2048
   kernel.fpu_sharing.generic.x86.fpu:
     extra_args: CONF_FILE=prj_x86.conf
     extra_configs:

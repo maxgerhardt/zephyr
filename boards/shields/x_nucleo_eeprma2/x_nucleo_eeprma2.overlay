@@ -64,6 +64,7 @@
 };
 
 &arduino_spi {
+	status = "okay";
 	cs-gpios = <&arduino_header  8 GPIO_ACTIVE_LOW>, /* U5: eeprom4 */
 		   <&arduino_header 15 GPIO_ACTIVE_LOW>, /* U6: eeprom5 */
 		   <&arduino_header 16 GPIO_ACTIVE_LOW>; /* U7: eeprom6 */
@@ -71,7 +72,7 @@
 	/*
 	 * All chip select pins have an on board 10k pull-up resistor to VCC,
 	 * and are connected to their respective arduino pins via a normally
-	 * closed solder brige.
+	 * closed solder bridge.
 	 *
 	 * All hold pins are connected to VCC with a 10k pull-up, and
 	 * have a connection to arduino pin A3 on CN8 via an open solder bridge.

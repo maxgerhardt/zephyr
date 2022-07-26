@@ -9,6 +9,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <zephyr/devicetree.h>
+
+#define ECIA_BASE_ADDR			DT_REG_ADDR(DT_NODELABEL(ecia))
 
 #define MCHP_FIRST_GIRQ_NOS		8u
 #define MCHP_LAST_GIRQ_NOS		26u
@@ -874,7 +877,7 @@ enum MCHP_GIRQ_INDEX {
 /*
  * GIRQ22 Source, Enable_Set/Clr, Result registers bit positions
  * NOTE: These wake sources allow the peripheral to turn back on clocks
- * long enough to facilite the data transfer. No interrupt to the EC occurs
+ * long enough to facilitate the data transfer. No interrupt to the EC occurs
  * unless the peripheral was configured to generate an EC interrupt for
  * the specific data transfer.
  */
@@ -1075,6 +1078,18 @@ enum MCHP_GIRQ_INDEX {
 
 #define MCHP_GIRQ25_NVIC_AGGR		16u
 
+#define MCHP_MSVW00_GIRQ		24
+#define MCHP_MSVW01_GIRQ		24
+#define MCHP_MSVW02_GIRQ		24
+#define MCHP_MSVW03_GIRQ		24
+#define MCHP_MSVW04_GIRQ		24
+#define MCHP_MSVW05_GIRQ		24
+#define MCHP_MSVW06_GIRQ		24
+#define MCHP_MSVW07_GIRQ		25
+#define MCHP_MSVW08_GIRQ		25
+#define MCHP_MSVW09_GIRQ		25
+#define MCHP_MSVW10_GIRQ		25
+
 /* GIRQ26 Source, Enable_Set/Clr, Result registers bit positions */
 #define MCHP_GPIO_0240_GIRQ_POS		0
 #define MCHP_GPIO_0241_GIRQ_POS		1
@@ -1155,5 +1170,80 @@ struct ecia_regs {
 	volatile uint32_t BLK_EN_CLR;
 	volatile uint32_t BLK_ACTIVE;
 };
+
+/* Until XEC ECIA driver is available we define these locally */
+static inline void mchp_soc_ecia_girq_aggr_en(uint8_t girq, uint8_t en)
+{
+	if ((girq < MCHP_FIRST_GIRQ_NOS) || (girq > MCHP_LAST_GIRQ_NOS)) {
+		return;
+	}
+
+	struct ecia_regs *ecia = (struct ecia_regs *)(ECIA_BASE_ADDR);
+
+	if (en) {
+		ecia->BLK_EN_SET = BIT(girq);
+	} else {
+		ecia->BLK_EN_CLR = BIT(girq);
+	}
+}
+
+static inline void mchp_soc_ecia_girq_src_clr(uint8_t girq, uint8_t pin)
+{
+	if ((girq < MCHP_FIRST_GIRQ_NOS) || (girq > MCHP_LAST_GIRQ_NOS) ||
+	    (pin > 31)) {
+		return;
+	}
+
+	struct ecia_regs *ecia = (struct ecia_regs *)(ECIA_BASE_ADDR);
+
+	ecia->GIRQ[girq - 8u].SRC = BIT(pin);
+}
+
+static inline void mchp_soc_ecia_girq_src_clr_bitmap(uint8_t girq,
+						     uint32_t bitmap)
+{
+	if ((girq < MCHP_FIRST_GIRQ_NOS) || (girq > MCHP_LAST_GIRQ_NOS)) {
+		return;
+	}
+
+	struct ecia_regs *ecia = (struct ecia_regs *)(ECIA_BASE_ADDR);
+
+	ecia->GIRQ[girq - 8u].SRC = bitmap;
+}
+
+static inline void mchp_soc_ecia_girq_src_dis(uint8_t girq, uint8_t pin)
+{
+	if ((girq < MCHP_FIRST_GIRQ_NOS) || (girq > MCHP_LAST_GIRQ_NOS) ||
+	    (pin > 31)) {
+		return;
+	}
+
+	struct ecia_regs *ecia = (struct ecia_regs *)(ECIA_BASE_ADDR);
+
+	ecia->GIRQ[girq - 8u].EN_CLR = BIT(pin);
+}
+
+static inline void mchp_soc_ecia_girq_src_en(uint8_t girq, uint8_t pin)
+{
+	if ((girq < MCHP_FIRST_GIRQ_NOS) || (girq > MCHP_LAST_GIRQ_NOS) ||
+	    (pin > 31)) {
+		return;
+	}
+
+	struct ecia_regs *ecia = (struct ecia_regs *)(ECIA_BASE_ADDR);
+
+	ecia->GIRQ[girq - 8u].EN_SET = BIT(pin);
+}
+
+static inline uint32_t mchp_soc_ecia_girq_result(uint8_t girq)
+{
+	if ((girq < MCHP_FIRST_GIRQ_NOS) || (girq > MCHP_LAST_GIRQ_NOS)) {
+		return 0u;
+	}
+
+	struct ecia_regs *ecia = (struct ecia_regs *)(ECIA_BASE_ADDR);
+
+	return ecia->GIRQ[girq - 8u].RESULT;
+}
 
 #endif /* #ifndef _MEC172X_ECIA_H */

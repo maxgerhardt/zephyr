@@ -5,10 +5,10 @@
  *
  */
 
-#include <kernel.h>
-#include <device.h>
-#include <init.h>
-#include <arch/arm/aarch32/cortex_a_r/cmsis.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/arch/arm/aarch32/cortex_a_r/cmsis.h>
 
 /**
  *
@@ -30,7 +30,7 @@ static int soc_init(const struct device *arg)
 
 SYS_INIT(soc_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
 
-void z_platform_init(void)
+void z_arm_platform_init(void)
 {
 	/*
 	 * Use normal exception vectors address range (0x0-0x1C).

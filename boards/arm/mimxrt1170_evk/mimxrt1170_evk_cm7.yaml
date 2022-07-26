@@ -20,3 +20,11 @@ supported:
   - can
   - spi
   - adc
+  - i2c
+  - pwm
+  - dma
+  - usb_device
+  - hwinfo
+  - watchdog
+  - netif:eth
+  - mipi_dsi

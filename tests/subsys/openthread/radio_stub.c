@@ -4,8 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+
+/* Disable syscall tracing to avoid a conflict with the device_get_binding
+ * macro defined below
+ */
+#define DISABLE_SYSCALL_TRACING
+
 /* needed here so the static device_get_binding does not get renamed */
-#include <device.h>
+#include <zephyr/device.h>
 
 /* OpenThread not enabled here */
 #define CONFIG_OPENTHREAD_L2_LOG_LEVEL LOG_LEVEL_DBG

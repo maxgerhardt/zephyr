@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 #include <mem.h>
 
 / {
@@ -25,6 +25,7 @@
 		sw1 = &sw1;
 		sw2 = &sw2;
 		sw3 = &sw3;
+		spi-flash0 = &flash0;
 	};
 
 	leds {

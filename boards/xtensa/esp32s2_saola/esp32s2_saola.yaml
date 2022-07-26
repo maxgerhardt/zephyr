@@ -1,0 +1,10 @@
+identifier: esp32s2_saola
+name: ESP32-S2
+type: mcu
+arch: xtensa
+toolchain:
+  - zephyr
+testing:
+  ignore_tags:
+    - net
+    - bluetooth

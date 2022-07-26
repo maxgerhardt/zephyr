@@ -5,9 +5,9 @@
  *
  */
 
-#include <kernel.h>
-#include <device.h>
-#include <init.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
 
 /**
  *
@@ -27,7 +27,7 @@ static int soc_init(const struct device *arg)
 	return 0;
 }
 
-void z_platform_init(void)
+void z_arm_platform_init(void)
 {
 	L1C_DisableCaches();
 	L1C_DisableBTAC();

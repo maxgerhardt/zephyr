@@ -22,10 +22,10 @@
  *   when the counters reach zero.
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(counter_mchp_xec, CONFIG_COUNTER_LOG_LEVEL);
 
-#include <drivers/counter.h>
+#include <zephyr/drivers/counter.h>
 #include <soc.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -318,8 +318,8 @@ static int counter_xec_init(const struct device *dev)
 		.config_func = counter_xec_irq_config_##inst,		\
 		.base_address = DT_INST_REG_ADDR(inst),			\
 		.prescaler = DT_INST_PROP(inst, prescaler),		\
-		.girq_id = DT_INST_PROP(inst, girq),			\
-		.girq_bit = DT_INST_PROP(inst, girq_bit),		\
+		.girq_id = DT_INST_PROP_BY_IDX(0, girqs, 0),		\
+		.girq_bit = DT_INST_PROP_BY_IDX(0, girqs, 1),		\
 	};								\
 									\
 	DEVICE_DT_INST_DEFINE(inst,					\
@@ -328,7 +328,7 @@ static int counter_xec_init(const struct device *dev)
 			    &counter_xec_dev_data_##inst,		\
 			    &counter_xec_dev_config_##inst,		\
 			    POST_KERNEL,				\
-			    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,		\
+			    CONFIG_COUNTER_INIT_PRIORITY,		\
 			    &counter_xec_api);				\
 									\
 	static void counter_xec_irq_config_##inst(void)			\

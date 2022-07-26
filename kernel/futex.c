@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel.h>
-#include <kernel_structs.h>
-#include <spinlock.h>
+#include <zephyr/kernel.h>
+#include <zephyr/kernel_structs.h>
+#include <zephyr/spinlock.h>
 #include <kswap.h>
-#include <syscall_handler.h>
-#include <init.h>
+#include <zephyr/syscall_handler.h>
+#include <zephyr/init.h>
 #include <ksched.h>
 
 static struct z_futex_data *k_futex_find_data(struct k_futex *futex)
@@ -74,12 +74,11 @@ int z_impl_k_futex_wait(struct k_futex *futex, int expected,
 		return -EINVAL;
 	}
 
-	key = k_spin_lock(&futex_data->lock);
-
 	if (atomic_get(&futex->val) != (atomic_val_t)expected) {
-		k_spin_unlock(&futex_data->lock, key);
 		return -EAGAIN;
 	}
+
+	key = k_spin_lock(&futex_data->lock);
 
 	ret = z_pend_curr(&futex_data->lock,
 			key, &futex_data->wait_q, timeout);

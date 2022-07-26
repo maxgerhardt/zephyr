@@ -6,10 +6,10 @@
 
 #include <ctype.h>
 #include <stdlib.h>
-#include <sys/atomic.h>
-#include <shell/shell.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/shell/shell.h>
 #if defined(CONFIG_SHELL_BACKEND_DUMMY)
-#include <shell/shell_dummy.h>
+#include <zephyr/shell/shell_dummy.h>
 #endif
 #include "shell_ops.h"
 #include "shell_help.h"
@@ -31,6 +31,15 @@
 	"WARNING: A print request was detected on not active shell backend.\n"
 #define SHELL_MSG_TOO_MANY_ARGS		"Too many arguments in the command.\n"
 #define SHELL_INIT_OPTION_PRINTER	(NULL)
+
+#define SHELL_THREAD_PRIORITY \
+	COND_CODE_1(CONFIG_SHELL_THREAD_PRIORITY_OVERRIDE, \
+			(CONFIG_SHELL_THREAD_PRIORITY), (K_LOWEST_APPLICATION_THREAD_PRIO))
+
+BUILD_ASSERT(SHELL_THREAD_PRIORITY >=
+		  K_HIGHEST_APPLICATION_THREAD_PRIO
+		&& SHELL_THREAD_PRIORITY <= K_LOWEST_APPLICATION_THREAD_PRIO,
+		  "Invalid range for thread priority");
 
 static inline void receive_state_change(const struct shell *shell,
 					enum shell_receive_state state)
@@ -530,7 +539,7 @@ static int exec_cmd(const struct shell *shell, size_t argc, const char **argv,
 		uint8_t opt8 = shell->ctx->active_cmd.args.optional;
 		uint32_t opt = (opt8 == SHELL_OPT_ARG_CHECK_SKIP) ?
 				UINT16_MAX : opt8;
-		bool in_range = (argc >= mand) && (argc <= (mand + opt));
+		const bool in_range = IN_RANGE(argc, mand, mand + opt);
 
 		/* Check if argc is within allowed range */
 		ret_val = cmd_precheck(shell, in_range);
@@ -538,7 +547,7 @@ static int exec_cmd(const struct shell *shell, size_t argc, const char **argv,
 
 	if (!ret_val) {
 #if CONFIG_SHELL_GETOPT
-		z_shell_getopt_init(&shell->ctx->getopt_state);
+		getopt_init();
 #endif
 
 		z_flag_cmd_ctx_set(shell, true);
@@ -1143,7 +1152,7 @@ static void shell_log_process(const struct shell *shell)
 	int result;
 
 	do {
-		if (!IS_ENABLED(CONFIG_LOG_IMMEDIATE)) {
+		if (!IS_ENABLED(CONFIG_LOG_MODE_IMMEDIATE)) {
 			z_shell_cmd_line_erase(shell);
 
 			processed = z_shell_log_backend_process(
@@ -1167,51 +1176,58 @@ static void shell_log_process(const struct shell *shell)
 	} while (processed && !signaled);
 }
 
-static int instance_init(const struct shell *shell, const void *p_config,
-			 bool use_colors)
+static int instance_init(const struct shell *sh,
+			 const void *transport_config,
+			 struct shell_backend_config_flags cfg_flags)
 {
-	__ASSERT_NO_MSG((shell->shell_flag == SHELL_FLAG_CRLF_DEFAULT) ||
-			(shell->shell_flag == SHELL_FLAG_OLF_CRLF));
+	__ASSERT_NO_MSG((sh->shell_flag == SHELL_FLAG_CRLF_DEFAULT) ||
+			(sh->shell_flag == SHELL_FLAG_OLF_CRLF));
 
-	memset(shell->ctx, 0, sizeof(*shell->ctx));
-	shell->ctx->prompt = shell->default_prompt;
+	memset(sh->ctx, 0, sizeof(*sh->ctx));
+	sh->ctx->prompt = sh->default_prompt;
 	if (CONFIG_SHELL_CMD_ROOT[0]) {
-		shell->ctx->selected_cmd = root_cmd_find(CONFIG_SHELL_CMD_ROOT);
+		sh->ctx->selected_cmd = root_cmd_find(CONFIG_SHELL_CMD_ROOT);
 	}
 
-	history_init(shell);
+	history_init(sh);
 
-	k_mutex_init(&shell->ctx->wr_mtx);
+	k_mutex_init(&sh->ctx->wr_mtx);
 
 	for (int i = 0; i < SHELL_SIGNALS; i++) {
-		k_poll_signal_init(&shell->ctx->signals[i]);
-		k_poll_event_init(&shell->ctx->events[i],
+		k_poll_signal_init(&sh->ctx->signals[i]);
+		k_poll_event_init(&sh->ctx->events[i],
 				  K_POLL_TYPE_SIGNAL,
 				  K_POLL_MODE_NOTIFY_ONLY,
-				  &shell->ctx->signals[i]);
+				  &sh->ctx->signals[i]);
 	}
 
 	if (IS_ENABLED(CONFIG_SHELL_STATS)) {
-		shell->stats->log_lost_cnt = 0;
+		sh->stats->log_lost_cnt = 0;
 	}
 
-	z_flag_tx_rdy_set(shell, true);
-	z_flag_echo_set(shell, IS_ENABLED(CONFIG_SHELL_ECHO_STATUS));
-	z_flag_obscure_set(shell, IS_ENABLED(CONFIG_SHELL_START_OBSCURED));
-	z_flag_mode_delete_set(shell,
-			     IS_ENABLED(CONFIG_SHELL_BACKSPACE_MODE_DELETE));
-	shell->ctx->vt100_ctx.cons.terminal_wid =
-					CONFIG_SHELL_DEFAULT_TERMINAL_WIDTH;
-	shell->ctx->vt100_ctx.cons.terminal_hei =
-					CONFIG_SHELL_DEFAULT_TERMINAL_HEIGHT;
-	shell->ctx->vt100_ctx.cons.name_len = z_shell_strlen(shell->ctx->prompt);
-	z_flag_use_colors_set(shell, IS_ENABLED(CONFIG_SHELL_VT100_COLORS));
+	z_flag_tx_rdy_set(sh, true);
 
-	int ret = shell->iface->api->init(shell->iface, p_config,
-					  transport_evt_handler,
-					  (void *)shell);
+	sh->ctx->vt100_ctx.cons.terminal_wid =
+					CONFIG_SHELL_DEFAULT_TERMINAL_WIDTH;
+	sh->ctx->vt100_ctx.cons.terminal_hei =
+					CONFIG_SHELL_DEFAULT_TERMINAL_HEIGHT;
+	sh->ctx->vt100_ctx.cons.name_len = z_shell_strlen(sh->ctx->prompt);
+
+	/* Configure backend according to enabled shell features and backend
+	 * specific settings.
+	 */
+	cfg_flags.obscure     &= IS_ENABLED(CONFIG_SHELL_START_OBSCURED);
+	cfg_flags.use_colors  &= IS_ENABLED(CONFIG_SHELL_VT100_COLORS);
+	cfg_flags.use_vt100   &= IS_ENABLED(CONFIG_SHELL_VT100_COMMANDS);
+	cfg_flags.echo        &= IS_ENABLED(CONFIG_SHELL_ECHO_STATUS);
+	cfg_flags.mode_delete &= IS_ENABLED(CONFIG_SHELL_BACKSPACE_MODE_DELETE);
+	sh->ctx->cfg.flags = cfg_flags;
+
+	int ret = sh->iface->api->init(sh->iface, transport_config,
+				       transport_evt_handler,
+				       (void *)sh);
 	if (ret == 0) {
-		state_set(shell, SHELL_STATE_INITIALIZED);
+		state_set(sh, SHELL_STATE_INITIALIZED);
 	}
 
 	return ret;
@@ -1314,10 +1330,6 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 
 		k_mutex_lock(&shell->ctx->wr_mtx, K_FOREVER);
 
-		if (shell->iface->api->update) {
-			shell->iface->api->update(shell->iface);
-		}
-
 		shell_signal_handle(shell, SHELL_SIGNAL_KILL, kill_handler);
 		shell_signal_handle(shell, SHELL_SIGNAL_RXRDY, shell_process);
 		if (IS_ENABLED(CONFIG_SHELL_LOG_BACKEND)) {
@@ -1325,12 +1337,17 @@ void shell_thread(void *shell_handle, void *arg_log_backend,
 					    shell_log_process);
 		}
 
+		if (shell->iface->api->update) {
+			shell->iface->api->update(shell->iface);
+		}
+
 		k_mutex_unlock(&shell->ctx->wr_mtx);
 	}
 }
 
 int shell_init(const struct shell *shell, const void *transport_config,
-	       bool use_colors, bool log_backend, uint32_t init_log_level)
+	       struct shell_backend_config_flags cfg_flags,
+	       bool log_backend, uint32_t init_log_level)
 {
 	__ASSERT_NO_MSG(shell);
 	__ASSERT_NO_MSG(shell->ctx && shell->iface && shell->default_prompt);
@@ -1339,17 +1356,17 @@ int shell_init(const struct shell *shell, const void *transport_config,
 		return -EALREADY;
 	}
 
-	int err = instance_init(shell, transport_config, use_colors);
+	int err = instance_init(shell, transport_config, cfg_flags);
 
 	if (err != 0) {
 		return err;
 	}
 
 	k_tid_t tid = k_thread_create(shell->thread,
-			      shell->stack, CONFIG_SHELL_STACK_SIZE,
-			      shell_thread, (void *)shell, (void *)log_backend,
-			      UINT_TO_POINTER(init_log_level),
-			      K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
+				  shell->stack, CONFIG_SHELL_STACK_SIZE,
+				  shell_thread, (void *)shell, (void *)log_backend,
+				  UINT_TO_POINTER(init_log_level),
+				  SHELL_THREAD_PRIORITY, 0, K_NO_WAIT);
 
 	shell->ctx->tid = tid;
 	k_thread_name_set(tid, shell->thread_name);
@@ -1396,7 +1413,9 @@ int shell_start(const struct shell *shell)
 		z_shell_vt100_color_set(shell, SHELL_NORMAL);
 	}
 
-	z_shell_raw_fprintf(shell->fprintf_ctx, "\n\n");
+	if (z_shell_strlen(shell->default_prompt) > 0) {
+		z_shell_raw_fprintf(shell->fprintf_ctx, "\n\n");
+	}
 	state_set(shell, SHELL_STATE_ACTIVE);
 
 	k_mutex_unlock(&shell->ctx->wr_mtx);
@@ -1449,33 +1468,33 @@ void shell_process(const struct shell *shell)
 /* This function mustn't be used from shell context to avoid deadlock.
  * However it can be used in shell command handlers.
  */
-void shell_vfprintf(const struct shell *shell, enum shell_vt100_color color,
+void shell_vfprintf(const struct shell *sh, enum shell_vt100_color color,
 		   const char *fmt, va_list args)
 {
-	__ASSERT_NO_MSG(shell);
+	__ASSERT_NO_MSG(sh);
 	__ASSERT(!k_is_in_isr(), "Thread context required.");
-	__ASSERT_NO_MSG(shell->ctx);
-	__ASSERT_NO_MSG((shell->ctx->internal.flags.cmd_ctx == 1) ||
-			(k_current_get() != shell->ctx->tid));
-	__ASSERT_NO_MSG(shell->fprintf_ctx);
+	__ASSERT_NO_MSG(sh->ctx);
+	__ASSERT_NO_MSG(z_flag_cmd_ctx_get(sh) ||
+			(k_current_get() != sh->ctx->tid));
+	__ASSERT_NO_MSG(sh->fprintf_ctx);
 	__ASSERT_NO_MSG(fmt);
 
 	/* Sending a message to a non-active shell leads to a dead lock. */
-	if (state_get(shell) != SHELL_STATE_ACTIVE) {
-		z_flag_print_noinit_set(shell, true);
+	if (state_get(sh) != SHELL_STATE_ACTIVE) {
+		z_flag_print_noinit_set(sh, true);
 		return;
 	}
 
-	k_mutex_lock(&shell->ctx->wr_mtx, K_FOREVER);
-	if (!z_flag_cmd_ctx_get(shell) && !shell->ctx->bypass) {
-		z_shell_cmd_line_erase(shell);
+	k_mutex_lock(&sh->ctx->wr_mtx, K_FOREVER);
+	if (!z_flag_cmd_ctx_get(sh) && !sh->ctx->bypass) {
+		z_shell_cmd_line_erase(sh);
 	}
-	z_shell_vfprintf(shell, color, fmt, args);
-	if (!z_flag_cmd_ctx_get(shell) && !shell->ctx->bypass) {
-		z_shell_print_prompt_and_cmd(shell);
+	z_shell_vfprintf(sh, color, fmt, args);
+	if (!z_flag_cmd_ctx_get(sh) && !sh->ctx->bypass) {
+		z_shell_print_prompt_and_cmd(sh);
 	}
-	z_transport_buffer_flush(shell);
-	k_mutex_unlock(&shell->ctx->wr_mtx);
+	z_transport_buffer_flush(sh);
+	k_mutex_unlock(&sh->ctx->wr_mtx);
 }
 
 /* This function mustn't be used from shell context to avoid deadlock.
@@ -1566,7 +1585,7 @@ void shell_help(const struct shell *shell)
 	k_mutex_unlock(&shell->ctx->wr_mtx);
 }
 
-int shell_execute_cmd(const struct shell *shell, const char *cmd)
+int shell_execute_cmd(const struct shell *sh, const char *cmd)
 {
 	uint16_t cmd_len = z_shell_strlen(cmd);
 	int ret_val;
@@ -1579,25 +1598,26 @@ int shell_execute_cmd(const struct shell *shell, const char *cmd)
 		return -ENOMEM;
 	}
 
-	if (shell == NULL) {
+	if (sh == NULL) {
 #if defined(CONFIG_SHELL_BACKEND_DUMMY)
-		shell = shell_backend_dummy_get_ptr();
+		sh = shell_backend_dummy_get_ptr();
 #else
 		return -EINVAL;
 #endif
 	}
 
-	__ASSERT(shell->ctx->internal.flags.cmd_ctx == 0,
-						"Function cannot be called"
-						" from command context");
+	__ASSERT(!z_flag_cmd_ctx_get(sh), "Function cannot be called"
+					  " from command context");
 
-	strcpy(shell->ctx->cmd_buff, cmd);
-	shell->ctx->cmd_buff_len = cmd_len;
-	shell->ctx->cmd_buff_pos = cmd_len;
+	strcpy(sh->ctx->cmd_buff, cmd);
+	sh->ctx->cmd_buff_len = cmd_len;
+	sh->ctx->cmd_buff_pos = cmd_len;
 
-	k_mutex_lock(&shell->ctx->wr_mtx, K_FOREVER);
-	ret_val = execute(shell);
-	k_mutex_unlock(&shell->ctx->wr_mtx);
+	k_mutex_lock(&sh->ctx->wr_mtx, K_FOREVER);
+	ret_val = execute(sh);
+	k_mutex_unlock(&sh->ctx->wr_mtx);
+
+	cmd_buffer_clear(sh);
 
 	return ret_val;
 }

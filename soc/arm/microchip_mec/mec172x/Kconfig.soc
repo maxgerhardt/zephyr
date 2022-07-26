@@ -12,6 +12,9 @@ config SOC_MEC172X_NSZ
 
 endchoice
 
+config RTOS_TIMER
+	bool "MEC172x RTOS Timer(32KHz) as kernel timer"
+
 config SOC_MEC172X_PROC_CLK_DIV
 	int "PROC_CLK_DIV"
 	default 1
@@ -21,3 +24,8 @@ config SOC_MEC172X_PROC_CLK_DIV
 	  and main 96 MHz clock (MCK):
 	  HCLK = MCK / PROC_CLK_DIV
 	  Allowed divider values: 1, 3, 4, 16, and 48.
+
+config SOC_MEC172X_TEST_CLK_OUT
+	bool "Test clock out pin"
+	help
+	  Enables a test clock out pin

@@ -5,11 +5,11 @@
  */
 
 #include <ztest.h>
-#include <drivers/spi.h>
+#include <zephyr/drivers/spi.h>
 
 #define TEST_FREQ_HZ 24000000U
 #define W25Q128_JEDEC_ID 0x001840efU
-#define SPI_DEV DT_LABEL(DT_NODELABEL(spi0))
+#define SPI_NODE DT_NODELABEL(spi0)
 
 #define TEST_BUF_SIZE 4096U
 #define MAX_TX_BUF 2
@@ -48,7 +48,7 @@ struct spi_buf txb[MAX_TX_BUF], rxb;
 struct spi_config spi_cfg_single, spi_cfg_dual, spi_cfg_quad;
 
 /**
- * @brief Test spi devcie
+ * @brief Test spi device
  * @details
  * - Find spi device
  * - Read flash jedec id
@@ -66,8 +66,8 @@ void test_spi_device(void)
 	spi_cfg_single.cs = NULL;
 
 	/* find spi device */
-	spi_dev = device_get_binding(SPI_DEV);
-	zassert_true(spi_dev, "Failed to find device %s", SPI_DEV);
+	spi_dev = DEVICE_DT_GET(SPI_NODE);
+	zassert_true(device_is_ready(spi_dev), "SPI controller device is not ready");
 
 	/* read jedec id */
 	memset(safbuf, 0, TEST_BUF_SIZE);
@@ -237,7 +237,7 @@ void test_spi_single_read(void)
 	spi_opcode = SPI_FAST_READ_DATA;
 
 	/* read data using spi single mode */
-	/* set the spi opreation code and address */
+	/* set the spi operation code and address */
 	memset(safbuf, 0, TEST_BUF_SIZE);
 	safbuf[0] = spi_opcode & 0xFFU;
 	safbuf[1] = SPI_TEST_ADDRESS & 0xFFFFFFU;
@@ -297,7 +297,7 @@ void test_spi_dual_read(void)
 	spi_opcode = SPI_DUAL_FAST_READ_DATA;
 
 	/* read data using spi dual mode */
-	/* set the spi opreation code and address */
+	/* set the spi operation code and address */
 	memset(safbuf, 0, TEST_BUF_SIZE);
 	safbuf[0] = spi_opcode & 0xFFU;
 	safbuf[1] = SPI_TEST_ADDRESS & 0xFFFFFFU;
@@ -476,7 +476,7 @@ void test_spi_quad_write(void)
 	spi_cfg_quad.cs = NULL;
 
 	/* write data using spi quad mode */
-	/* send quad wirte opcode and address using single mode */
+	/* send quad write opcode and address using single mode */
 	memset(safbuf, 0, TEST_BUF_SIZE);
 	safbuf[0] = SPI_QUAD_WRITE_DATA;
 	safbuf[1] = SPI_TEST_ADDRESS_2 & 0xFFFFFFU;
@@ -539,7 +539,7 @@ void test_spi_quad_read(void)
 	spi_opcode = SPI_QUAD_FAST_READ_DATA;
 
 	/* read data using spi quad mode */
-	/* set the spi opreation code and address */
+	/* set the spi operation code and address */
 	memset(safbuf, 0, TEST_BUF_SIZE);
 	safbuf[0] = spi_opcode & 0xFFU;
 	safbuf[1] = SPI_TEST_ADDRESS_2 & 0xFFFFFFU;

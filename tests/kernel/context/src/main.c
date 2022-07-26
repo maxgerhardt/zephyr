@@ -20,69 +20,42 @@
  * @}
  */
 
+#include <stdlib.h>
 #include <ztest.h>
-#include <kernel_structs.h>
-#include <arch/cpu.h>
-#include <irq_offload.h>
-#include <sys_clock.h>
+#include <zephyr/kernel_structs.h>
+#include <zephyr/arch/cpu.h>
+#include <zephyr/irq_offload.h>
+#include <zephyr/sys_clock.h>
 
-/*
- * Include soc.h from platform to get IRQ number.
- * NOTE: Cortex-M does not need IRQ numbers
- */
-#if !defined(CONFIG_CPU_CORTEX_M) && !defined(CONFIG_XTENSA)
+#if defined(CONFIG_SOC_POSIX) || defined(CONFIG_ARC)
+/* TIMER_TICK_IRQ <soc.h> header for certain platforms */
 #include <soc.h>
 #endif
 
-#define THREAD_STACKSIZE    (512 + CONFIG_TEST_EXTRA_STACKSIZE)
-#define THREAD_STACKSIZE2   (384 + CONFIG_TEST_EXTRA_STACKSIZE)
+#define THREAD_STACKSIZE    (512 + CONFIG_TEST_EXTRA_STACK_SIZE)
+#define THREAD_STACKSIZE2   (384 + CONFIG_TEST_EXTRA_STACK_SIZE)
 #define THREAD_PRIORITY     4
 
 #define THREAD_SELF_CMD    0
 #define EXEC_CTX_TYPE_CMD  1
 
 #define UNKNOWN_COMMAND    -1
+#define INVALID_BEHAVIOUR  -2
 
 /*
  * Get the timer type dependent IRQ number. If timer type
  * is not defined in platform, generate an error
  */
-#if defined(CONFIG_HPET_TIMER)
-#define TICK_IRQ DT_IRQN(DT_INST(0, intel_hpet))
-#elif defined(CONFIG_ARM_ARCH_TIMER)
-#define TICK_IRQ ARM_ARCH_TIMER_IRQ
-#elif defined(CONFIG_APIC_TIMER)
-#define TICK_IRQ CONFIG_APIC_TIMER_IRQ
-#elif defined(CONFIG_APIC_TSC_DEADLINE_TIMER)
-#define TICK_IRQ z_loapic_irq_base() /* first LVT interrupt */
-#elif defined(CONFIG_XTENSA_TIMER)
-#define TICK_IRQ UTIL_CAT(XCHAL_TIMER,		\
-			  UTIL_CAT(CONFIG_XTENSA_TIMER_ID, _INTERRUPT))
 
-#elif defined(CONFIG_CAVS_TIMER)
-#define TICK_IRQ DSP_WCT_IRQ(0)
-#elif defined(CONFIG_ALTERA_AVALON_TIMER)
-#define TICK_IRQ TIMER_0_IRQ
-#elif defined(CONFIG_ARCV2_TIMER)
-#define TICK_IRQ IRQ_TIMER0
-#elif defined(CONFIG_RISCV_MACHINE_TIMER)
-#define TICK_IRQ RISCV_MACHINE_TIMER_IRQ
-#elif defined(CONFIG_ITE_IT8XXX2_TIMER)
-#define TICK_IRQ DT_IRQ_BY_IDX(DT_NODELABEL(timer), 5, irq)
-#elif defined(CONFIG_LITEX_TIMER)
-#define TICK_IRQ DT_IRQN(DT_NODELABEL(timer0))
-#elif defined(CONFIG_RV32M1_LPTMR_TIMER)
-#define TICK_IRQ DT_IRQN(DT_ALIAS(system_lptmr))
-#elif defined(CONFIG_XLNX_PSTTC_TIMER)
-#define TICK_IRQ DT_IRQN(DT_INST(0, xlnx_ttcps))
-#elif defined(CONFIG_RCAR_CMT_TIMER)
-#define TICK_IRQ DT_IRQN(DT_INST(0, renesas_rcar_cmt))
+#if defined(CONFIG_APIC_TSC_DEADLINE_TIMER)
+#define TICK_IRQ z_loapic_irq_base() /* first LVT interrupt */
 #elif defined(CONFIG_CPU_CORTEX_M)
 /*
  * The Cortex-M use the SYSTICK exception for the system timer, which is
  * not considered an IRQ by the irq_enable/Disable APIs.
  */
 #elif defined(CONFIG_SPARC)
+#elif defined(CONFIG_MIPS)
 #elif defined(CONFIG_ARCH_POSIX)
 #if  defined(CONFIG_BOARD_NATIVE_POSIX)
 #define TICK_IRQ TIMER_TICK_IRQ
@@ -93,8 +66,10 @@
  */
 #endif /* defined(CONFIG_ARCH_POSIX) */
 #else
-/* generate an error */
-#error Timer type is not defined for this platform
+
+extern const int32_t z_sys_timer_irq_for_test;
+#define TICK_IRQ (z_sys_timer_irq_for_test)
+
 #endif
 
 /* Cortex-M1, Nios II, and RISCV without CONFIG_RISCV_HAS_CPU_IDLE
@@ -140,7 +115,7 @@ static ISR_INFO isr_info;
  * @brief Test cpu idle function
  *
  * @details
- * Test Objectve:
+ * Test Objective:
  * - The kernel architecture provide an idle function to be run when the system
  *   has no work for the current CPU
  * - This routine tests the k_cpu_idle() routine
@@ -179,7 +154,7 @@ static void test_kernel_cpu_idle(void);
  * @brief Test cpu idle function
  *
  * @details
- * Test Objectve:
+ * Test Objective:
  * - The kernel architecture provide an idle function to be run when the system
  *   has no work for the current CPU
  * - This routine tests the k_cpu_atomic_idle() routine
@@ -195,7 +170,7 @@ static void test_kernel_cpu_idle(void);
  * - N/A
  *
  * Test Procedure:
- * -# Record system time befor cpu enters idle state
+ * -# Record system time before cpu enters idle state
  * -# Enter cpu idle state by k_cpu_atomic_idle()
  * -# Record system time after cpu idle state is interrupted
  * -# Compare the two system time values.
@@ -219,12 +194,14 @@ static void test_kernel_cpu_idle_atomic(void);
  *
  * This routine is the ISR handler for isr_handler_trigger(). It performs
  * the command requested in <isr_info.command>.
- *
- * @return N/A
  */
 static void isr_handler(const void *data)
 {
 	ARG_UNUSED(data);
+
+	if (k_can_yield()) {
+		isr_info.error = INVALID_BEHAVIOUR;
+	}
 
 	switch (isr_info.command) {
 	case THREAD_SELF_CMD:
@@ -285,8 +262,6 @@ int irq_lock_wrapper(int unused)
 
 /**
  * @brief A wrapper for irq_unlock()
- *
- * @return N/A
  */
 void irq_unlock_wrapper(int imask)
 {
@@ -306,8 +281,6 @@ int irq_disable_wrapper(int irq)
 
 /**
  * @brief A wrapper for irq_enable()
- *
- * @return N/A
  */
 void irq_enable_wrapper(int irq)
 {
@@ -325,33 +298,28 @@ static void idle_timer_expiry_function(struct k_timer *timer_id)
 
 static void _test_kernel_cpu_idle(int atomic)
 {
-	int tms, tms2;
-	int i;
-
-	/* Align to ticks so the first iteration sleeps long enough
-	 * (k_timer_start() rounds its duration argument down, not up,
-	 * to a tick boundary)
-	 */
-	 k_usleep(1);
+	uint64_t t0, dt;
+	unsigned int i, key;
+	uint32_t dur = k_ms_to_ticks_ceil32(10);
+	uint32_t slop = 1 + k_ms_to_ticks_ceil32(1);
 
 	/* Set up a time to trigger events to exit idle mode */
 	k_timer_init(&idle_timer, idle_timer_expiry_function, NULL);
 
-	for (i = 0; i < 5; i++) { /* Repeat the test five times */
-		k_timer_start(&idle_timer, K_MSEC(1), K_NO_WAIT);
-		tms = k_uptime_get_32();
+	for (i = 0; i < 5; i++) {
+		k_usleep(1);
+		t0 = k_uptime_ticks();
+		k_timer_start(&idle_timer, K_TICKS(dur), K_NO_WAIT);
+		key = irq_lock();
 		if (atomic) {
-			unsigned int key = irq_lock();
-
 			k_cpu_atomic_idle(key);
 		} else {
 			k_cpu_idle();
 		}
-		tms += 1;
-		tms2 = k_uptime_get_32();
-		zassert_false(tms2 < tms, "Bad ms value computed,"
-	      "got %d which is less than %d\n",
-	      tms2, tms);
+		dt = k_uptime_ticks() - t0;
+		zassert_true(abs(dt - dur) <= slop,
+			     "Inaccurate wakeup, idled for %d ticks, expected %d",
+			     dt, dur);
 	}
 }
 
@@ -559,7 +527,7 @@ static void test_kernel_interrupts(void)
 {
 	/* IRQ locks don't prevent ticks from advancing in tickless mode */
 	if (IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
-		return;
+		ztest_test_skip();
 	}
 
 	_test_kernel_interrupts(irq_lock_wrapper, irq_unlock_wrapper, -1);
@@ -573,7 +541,7 @@ static void test_kernel_interrupts(void)
  * @details
  * Test Objective:
  * - To verify the kernel architecture layer shall provide a mechanism to
- *   simultenously mask all local CPU interrupts and return the previous mask
+ *   simultaneously mask all local CPU interrupts and return the previous mask
  *   state for restoration.
  * - This routine tests the routines for disabling and enabling interrupts.
  *   These include irq_disable() and irq_enable().
@@ -622,7 +590,7 @@ static void test_kernel_interrupts(void)
  */
 static void test_kernel_timer_interrupts(void)
 {
-#ifdef TICK_IRQ
+#if (defined(TICK_IRQ) && defined(CONFIG_TICKLESS_KERNEL))
 	/* Disable interrupts coming from the timer. */
 	_test_kernel_interrupts(irq_disable_wrapper, irq_enable_wrapper, TICK_IRQ);
 #else
@@ -634,7 +602,7 @@ static void test_kernel_timer_interrupts(void)
  * @brief Test some context routines
  *
  * @details
- * Test Objectve:
+ * Test Objective:
  * - Thread context handles derived from context switches must be able to be
  *   restored upon interrupt exit
  *
@@ -757,7 +725,6 @@ static void _test_kernel_thread(k_tid_t _thread_id)
  * @param arg2    unused
  * @param arg3    unused
  *
- * @return N/A
  */
 
 static void thread_helper(void *arg1, void *arg2, void *arg3)
@@ -817,6 +784,11 @@ static void k_yield_entry(void *arg0, void *arg1, void *arg2)
 
 	zassert_equal(thread_evidence, 0,
 		      "Helper created at higher priority ran prematurely.");
+
+	/*
+	 * Validate the thread is allowed to yield
+	 */
+	zassert_true(k_can_yield(), "Thread incorrectly detected it could not yield");
 
 	/*
 	 * Test that the thread will yield to the higher priority helper.
@@ -968,7 +940,7 @@ static void delayed_thread(void *num, void *arg2, void *arg3)
 }
 
 /**
- * @brief Test timouts
+ * @brief Test timeouts
  *
  * @ingroup kernel_context_tests
  *
@@ -992,7 +964,7 @@ static void test_busy_wait(void)
 }
 
 /**
- * @brief Test timouts
+ * @brief Test timeouts
  *
  * @ingroup kernel_context_tests
  *

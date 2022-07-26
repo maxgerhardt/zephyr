@@ -14,7 +14,7 @@
 #ifndef ZEPHYR_ARCH_ARM_INCLUDE_AARCH32_CORTEX_A_R_EXC_H_
 #define ZEPHYR_ARCH_ARM_INCLUDE_AARCH32_CORTEX_A_R_EXC_H_
 
-#include <arch/cpu.h>
+#include <zephyr/arch/cpu.h>
 
 #ifdef _ASMLANGUAGE
 
@@ -22,7 +22,7 @@
 
 #else
 
-#include <irq_offload.h>
+#include <zephyr/irq_offload.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,12 +38,27 @@ static ALWAYS_INLINE bool arch_is_in_isr(void)
 	return (_kernel.cpus[0].nested != 0U);
 }
 
+static ALWAYS_INLINE bool arch_is_in_nested_exception(const z_arch_esf_t *esf)
+{
+	return (_kernel.cpus[0].nested > 1U) ? (true) : (false);
+}
+
+#if defined(CONFIG_USERSPACE)
+/*
+ * This function is used by privileged code to determine if the thread
+ * associated with the stack frame is in user mode.
+ */
+static ALWAYS_INLINE bool z_arm_preempted_thread_in_user_mode(const z_arch_esf_t *esf)
+{
+	return ((esf->basic.xpsr & CPSR_M_Msk) == CPSR_M_USR);
+}
+#endif
+
 /**
  * @brief Setup system exceptions
  *
  * Enable fault exceptions.
  *
- * @return N/A
  */
 static ALWAYS_INLINE void z_arm_exc_setup(void)
 {
@@ -54,7 +69,6 @@ static ALWAYS_INLINE void z_arm_exc_setup(void)
  *
  * Clear out exceptions for Mem, Bus, Usage and Hard Faults
  *
- * @return N/A
  */
 static ALWAYS_INLINE void z_arm_clear_faults(void)
 {

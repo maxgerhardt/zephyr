@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
-#include <drivers/sensor.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/drivers/sensor.h>
 #include <stdio.h>
 
 #define pow2(x) ((x) * (x))
@@ -33,7 +33,7 @@ static double sqrt(double value)
 K_SEM_DEFINE(sem, 0, 1);
 
 static void trigger_handler(const struct device *dev,
-			    struct sensor_trigger *trigger)
+			    const struct sensor_trigger *trigger)
 {
 	ARG_UNUSED(trigger);
 

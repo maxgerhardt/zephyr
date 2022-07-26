@@ -12,10 +12,19 @@
  * described below.
  */
 
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
+/* VTOR bits 0:7 are reserved (RES0). This requires that the base address
+ * of the vector table is 64-word aligned.
+ */
+. = ALIGN( 1 << LOG2CEIL(4 * 64) );
+#elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 /* VTOR bits 0:6 are reserved (RES0). This requires that the base address
  * of the vector table is 32-word aligned.
  */
 . = ALIGN( 1 << LOG2CEIL(4 * 32) );
+#else
+#error "Unsupported architecture variant"
+#endif
 
 /* When setting TBLOFF in VTOR we must align the offset to the number of
  * exception entries in the vector table. The minimum alignment of 32 words
@@ -32,10 +41,6 @@ _vector_start = .;
 KEEP(*(.exc_vector_table))
 KEEP(*(".exc_vector_table.*"))
 
-KEEP(*(_IRQ_VECTOR_TABLE_SECTION_SYMS))
-
 KEEP(*(.vectors))
 
 _vector_end = .;
-
-#include "cortex_m/vector_table_pad.ld"

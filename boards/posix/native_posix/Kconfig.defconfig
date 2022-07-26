@@ -34,14 +34,7 @@ choice BT_HCI_BUS_TYPE
 	depends on BT_HCI
 endchoice
 
-config UART_NATIVE_POSIX
-	default y
-	depends on SERIAL
-
 if LOG
-
-config LOG_BACKEND_NATIVE_POSIX
-	default y if !SERIAL
 
 # For native_posix we can log synchronously without any problem
 # Doing so will be nicer for debugging
@@ -75,10 +68,20 @@ config FLASH_SIMULATOR
 
 config USB_NATIVE_POSIX
 	default y
-	depends on USB
+	depends on USB_DEVICE_DRIVER
 
 config EEPROM_SIMULATOR
 	default y
 	depends on EEPROM
+
+if I2C
+
+config EMUL
+	default y
+
+config I2C_EMUL
+	default y
+
+endif # I2C
 
 endif # BOARD_NATIVE_POSIX

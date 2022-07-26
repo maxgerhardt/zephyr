@@ -2,7 +2,8 @@
 
 /dts-v1/;
 
-#include <nxp/MKW24D512VHA5.dtsi>
+#include <nxp/nxp_kw2xd.dtsi>
+#include "usb_kw24d512-pinctrl.dtsi"
 
 / {
 	model = "NXP USB-KW24D512 board";
@@ -59,10 +60,11 @@
 &uart0 {
 	status = "okay";
 	current-speed = <115200>;
-	pinctrl-0 = <&UART0_RX_PTA1 &UART0_TX_PTA2>;
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-names = "default";
 };
 
-&usbd {
+zephyr_udc0: &usbd {
 	compatible = "nxp,kinetis-usbd";
 	status = "okay";
 	num-bidir-endpoints = <8>;

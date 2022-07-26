@@ -6,11 +6,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <stddef.h>
 #include <ztest.h>
 
-#include <bluetooth/uuid.h>
+#include <zephyr/bluetooth/uuid.h>
 
 static struct bt_uuid_16 uuid_16 = BT_UUID_INIT_16(0xffff);
 
@@ -22,7 +22,9 @@ static struct bt_uuid_128 le_128 = BT_UUID_INIT_128(
 	0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
 	0x00, 0x10, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00);
 
-static void test_uuid_cmp(void)
+ZTEST_SUITE(uuid_tests, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(uuid_tests, test_uuid_cmp)
 {
 	/* Compare UUID 16 bits */
 	zassert_false(bt_uuid_cmp(&uuid_16.uuid, BT_UUID_DECLARE_16(0xffff)),
@@ -45,7 +47,7 @@ static void test_uuid_cmp(void)
 		     "Test UUIDs match");
 }
 
-static void test_uuid_create(void)
+ZTEST(uuid_tests, test_uuid_create)
 {
 	uint8_t le16[] = { 0x01, 0x00 };
 	uint8_t be16[] = { 0x00, 0x01 };
@@ -86,13 +88,4 @@ static void test_uuid_create(void)
 	/* Compare swapped UUID 16 bits */
 	zassert_true(bt_uuid_cmp(&u.uuid, BT_UUID_DECLARE_16(0x0100)) == 0,
 		     "Test UUIDs don't match");
-}
-
-/*test case main entry*/
-void test_main(void)
-{
-	ztest_test_suite(test_uuid,
-			 ztest_unit_test(test_uuid_cmp),
-			 ztest_unit_test(test_uuid_create));
-	ztest_run_test_suite(test_uuid);
 }
