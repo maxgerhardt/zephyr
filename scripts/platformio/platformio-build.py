@@ -1378,6 +1378,9 @@ try:
 except:
     pass
 
+# Define bootloader SRAM to 0
+linker_arguments["link_flags"].insert(1, "-Wl,--defsym=CONFIG_BOOTLOADER_SRAM_SIZE=0")
+
 # Flags shouldn't be merged automatically as they have precise position in linker cmd
 ignore_flags = ("CMakeFiles", "-Wl,--whole-archive", "-Wl,--no-whole-archive", "-Wl,-T")
 linker_arguments["link_flags"] = filter_args(
