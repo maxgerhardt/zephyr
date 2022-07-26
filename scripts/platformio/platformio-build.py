@@ -560,7 +560,7 @@ def find_base_ldscript(app_includes):
     env.Exit(1)
 
 
-def get_linkerscript_cmd(app_includes, base_ld_script):
+def get_linkerscript_cmd(app_includes, base_ld_script, pre_num):
     cmd = [
         "$CC",
         "-x",
@@ -586,7 +586,7 @@ def get_linkerscript_cmd(app_includes, base_ld_script):
     cmd.extend(['-I"%s"' % inc for inc in app_includes["plain_includes"]])
 
     return env.Command(
-        os.path.join("$BUILD_DIR", "zephyr", "linker_zephyr_prebuilt.cmd"),
+        os.path.join("$BUILD_DIR", "zephyr", "linker_zephyr_pre%d.cmd" % pre_num),
         base_ld_script,
         env.VerboseAction(" ".join(cmd), "Generating linker script $TARGET"),
     )
@@ -1180,7 +1180,7 @@ def get_default_module_config(target_configs):
 
 
 def process_project_lib_deps(
-    modules_map, project_libs, preliminary_elf_path, offset_lib, lib_paths
+    modules_map, project_libs, preliminary_elf_path, preliminary_elf_path_1, offset_lib, lib_paths
 ):
     # Get rid of the `app` library as the project source files are handled by PlatformIO
     # and linker as object files in the linker command
@@ -1211,6 +1211,15 @@ def process_project_lib_deps(
     # specified as explicit dependencies.
     env.Depends(
         preliminary_elf_path,
+        [
+            os.path.join("$BUILD_DIR", library)
+            for library in project_libs["generic_libs"] + whole_libs
+            if "app" not in library and "dev_handles" not in library and "isrList" not in library
+        ],
+    )
+
+    env.Depends(
+        preliminary_elf_path_1,
         [
             os.path.join("$BUILD_DIR", library)
             for library in project_libs["generic_libs"] + whole_libs
@@ -1249,6 +1258,7 @@ target_configs = load_target_configurations(codemodel)
 
 app_config = target_configs.get("app")
 prebuilt_config_0 = target_configs.get("zephyr_pre0")
+prebuilt_config_1 = target_configs.get("zephyr_pre1")
 
 if not app_config or not prebuilt_config_0:
     sys.stderr.write("Error: Couldn't find main Zephyr target in the code model\n")
@@ -1276,10 +1286,12 @@ validate_driver()
 app_includes = get_app_includes(app_config)
 base_ld_script = find_base_ldscript(app_includes)
 final_ld_script = get_linkerscript_final_cmd(app_includes, base_ld_script)
-preliminary_ld_script = get_linkerscript_cmd(app_includes, base_ld_script)
+preliminary_ld_script = get_linkerscript_cmd(app_includes, base_ld_script, 0)
+preliminary_ld_script_1 = get_linkerscript_cmd(app_includes, base_ld_script, 1)
 
 env.Depends(final_ld_script, offset_header_file)
 env.Depends(preliminary_ld_script, offset_header_file)
+env.Depends(preliminary_ld_script_1, offset_header_file)
 
 #
 # Includible files processing
@@ -1342,26 +1354,30 @@ offsets_lib = build_library(env, target_configs["offsets"], PROJECT_SRC_DIR)
 # Preliminary elf and subsequent targets
 #
 
-preliminary_elf_path = os.path.join("$BUILD_DIR", "zephyr", "firmware-pre.elf")
+preliminary_elf_path = os.path.join("$BUILD_DIR", "zephyr", "firmware-pre0.elf")
+preliminary_elf_path_1 = os.path.join("$BUILD_DIR", "zephyr", "firmware-pre1.elf")
 
-for dep in (offsets_lib, preliminary_ld_script, version_header_file):
+for dep in (offsets_lib, preliminary_ld_script, preliminary_ld_script_1, version_header_file):
     env.Depends(preliminary_elf_path, dep)
 
 isr_table_file = generate_isr_table_file_cmd(
-    preliminary_elf_path, board, project_settings
+    preliminary_elf_path_1, board, project_settings
 )
 if project_settings.get("CONFIG_HAS_DTS", ""):
     dev_handles = generate_dev_handles(preliminary_elf_path)
+
+#env.Depends(preliminary_elf_path_1, dev_handles)
 
 #
 # Final firmware targets
 #
 
 env.Append(
-    PIOBUILDFILES=compile_source_files(prebuilt_config_0, env, PROJECT_SRC_DIR),
-    _EXTRA_ZEPHYR_PIOBUILDFILES=compile_source_files(
-        target_configs["zephyr_final"], env, PROJECT_SRC_DIR
-    ),
+    PIOBUILDFILES=[
+        compile_source_files(prebuilt_config_0, env, PROJECT_SRC_DIR),
+        compile_source_files(prebuilt_config_1, env, PROJECT_SRC_DIR)
+    ],
+    _EXTRA_ZEPHYR_PIOBUILDFILES=compile_source_files(target_configs["zephyr_final"], env, PROJECT_SRC_DIR),
     __ZEPHYR_OFFSET_HEADER_CMD=offset_header_file,
 )
 
@@ -1395,6 +1411,7 @@ process_project_lib_deps(
     framework_modules_map,
     linker_arguments["project_libs"],
     preliminary_elf_path,
+    preliminary_elf_path_1,
     offsets_lib,
     linker_arguments["lib_paths"],
 )
